@@ -1,0 +1,6 @@
+{
+  "name": "MaisVet Clínica Veterinária",
+  "description": "Plataforma clínica veterinária unificada para gestão clínica, recepção, faturamento e portal do tutor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
