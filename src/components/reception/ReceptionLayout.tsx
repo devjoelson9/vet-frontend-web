@@ -1,9 +1,9 @@
 import React from 'react';
+import { doctorAvatarUrl, vetHugDogUrl } from '../../assets/images';
 import {
   LayoutDashboard,
   Users,
   Calendar,
-  CreditCard,
   LogOut,
   CheckCircle2,
 } from 'lucide-react';
@@ -93,24 +93,6 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
                 </button>
               </div>
             </div>
-
-            {/* FINANCEIRO */}
-            <div>
-              <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Financeiro
-              </p>
-              <button
-                onClick={() => onNavigate('reception-checkout')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  currentScreen === 'reception-checkout'
-                    ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <CreditCard className="w-4 h-4 text-[#0e5a60]" />
-                <span>Registrar Pagamento</span>
-              </button>
-            </div>
           </div>
         </div>
 
@@ -118,7 +100,7 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
         <div className="p-3 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/src/assets/images/doctor_avatar_1791553366869.jpg"
+              src={doctorAvatarUrl}
               alt="Dr. Carlos Silva"
               className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
               referrerPolicy="no-referrer"
@@ -166,7 +148,7 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
             className="flex items-center gap-3 p-1 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
           >
             <img
-              src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+              src={vetHugDogUrl}
               alt="Dra. Sarah Jenkins"
               className="w-9 h-9 rounded-full object-cover border border-teal-200"
               referrerPolicy="no-referrer"

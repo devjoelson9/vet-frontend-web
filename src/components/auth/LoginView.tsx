@@ -12,6 +12,7 @@ import {
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { vetHugDogUrl } from '../../assets/images';
 
 interface LoginViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -84,7 +85,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
       {/* Left: Brand / Hero */}
       <div className="relative hidden lg:flex lg:w-[40%] xl:w-[42%] flex-col justify-between overflow-hidden">
         <img
-          src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+          src={vetHugDogUrl}
           alt="Veterinária abraçando cão Golden Retriever na clínica"
           className="absolute inset-0 h-full w-full object-cover"
           referrerPolicy="no-referrer"

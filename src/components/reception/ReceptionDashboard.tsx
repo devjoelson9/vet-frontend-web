@@ -1,79 +1,215 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Calendar,
   Users,
-  CreditCard,
+  CheckCircle2,
   AlertCircle,
   Clock,
-  Phone,
-  Check,
   ChevronRight,
   UserPlus,
   Plus,
-  RotateCw,
+  RefreshCw,
+  PawPrint,
 } from 'lucide-react';
-import { MOCK_QUEUE, MOCK_APPOINTMENTS } from '../../data/mockData';
 import { AppScreen } from '../../types';
+import type { AnimalApi } from '../../types/api';
+import { animalService } from '../../services/animalService';
+import { getApiErrorMessage } from '../../services/apiError';
+import {
+  agendamentoService,
+  formatHora,
+  toIsoDate,
+  type AgendamentoApi,
+} from '../../services/agendamentoService';
 
 interface ReceptionDashboardProps {
   onNavigate: (screen: AppScreen) => void;
 }
 
-export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNavigate }) => {
-  const [filter, setFilter] = useState<'all' | 'triaged'>('all');
-  const [queue, setQueue] = useState(MOCK_QUEUE);
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '—';
 
-  const filteredQueue = queue.filter((item) =>
-    filter === 'triaged' ? item.status === 'Triagem Concluída' : true
-  );
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNavigate }) => {
+  const [todayAppointments, setTodayAppointments] = useState<AgendamentoApi[]>([]);
+  const [waiting, setWaiting] = useState<AgendamentoApi[]>([]);
+  const [animals, setAnimals] = useState<Record<number, AnimalApi | null>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [pendingCheckInId, setPendingCheckInId] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setReloadKey((value) => value + 1);
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setIsLoading(true);
+      setError('');
+      setActionError('');
+
+      const today = toIsoDate(new Date());
+
+      try {
+        const [appointments, queue] = await Promise.all([
+          agendamentoService.listar({ inicio: today, fim: today }),
+          agendamentoService.listarFilaEspera({ data: today }),
+        ]);
+
+        if (cancelled) return;
+
+        setTodayAppointments(appointments);
+        setWaiting(queue);
+
+        const animalsMap: Record<number, AnimalApi | null> = {};
+        await Promise.all(
+          [...appointments, ...queue].map(async (item) => {
+            if (animalsMap[item.animalId] !== undefined) return;
+
+            const tutorId = item.tutorId;
+            animalsMap[item.animalId] = tutorId
+              ? await animalService.getByTutor(tutorId, item.animalId).catch(() => null)
+              : null;
+          })
+        );
+
+        if (!cancelled) setAnimals(animalsMap);
+      } catch (loadError) {
+        if (cancelled) return;
+
+        setTodayAppointments([]);
+        setWaiting([]);
+        setAnimals({});
+        setError(
+          getApiErrorMessage(loadError, 'Não foi possível carregar a agenda de hoje.')
+        );
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const handleCheckIn = async (item: AgendamentoApi) => {
+    setPendingCheckInId(item.id);
+    setActionError('');
+
+    try {
+      await agendamentoService.realizarCheckIn(item.id);
+      setReloadKey((value) => value + 1);
+    } catch (checkInError) {
+      setActionError(
+        getApiErrorMessage(checkInError, 'Não foi possível realizar o check-in do agendamento.')
+      );
+    } finally {
+      setPendingCheckInId(null);
+    }
+  };
+
+  const now = new Date();
+  const upcoming = todayAppointments
+    .filter((item) => item.status === 'AGENDADO')
+    .filter((item) => {
+      const [hour, minute] = item.horaInicio.split(':').map(Number);
+      const startsAt = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        hour ?? 0,
+        minute ?? 0
+      );
+      return startsAt.getTime() >= now.getTime();
+    })
+    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
+    .slice(0, 4);
+
+  const checkInsToday = todayAppointments.filter((item) => item.horarioCheckin).length;
+  const completedToday = todayAppointments.filter(
+    (item) => item.status === 'ATENDIMENTO_REALIZADO' || item.status === 'CONCLUIDO'
+  ).length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Breadcrumbs and Top Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
             <span>PawCare Central</span>
             <span>•</span>
-            <span className="text-slate-800 font-semibold">Recepção & Atendimento Operacional</span>
+            <span className="text-slate-800 font-semibold">
+              Recepção & Atendimento Operacional
+            </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 font-serif mt-1">
             Painel da Recepção
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Controle integrado de triagem, fluxo de sala de espera e acolhimento clínico.
+            Agenda, check-ins e fila de espera vindos do serviço de agendamento.
           </p>
         </div>
 
-        {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => alert('Check-in rápido registrado com sucesso para o paciente.')}
+            onClick={() => onNavigate('reception-schedule')}
             className="px-4 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Check-in Rápido</span>
-          </button>
-          <button
-            onClick={() => onNavigate('reception-schedule')}
-            className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition-all flex items-center gap-2"
-          >
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <span>+ Novo Agendamento</span>
+            <span>Novo Agendamento</span>
           </button>
           <button
             onClick={() => onNavigate('reception-new-tutor')}
             className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition-all flex items-center gap-2"
           >
             <UserPlus className="w-4 h-4 text-slate-500" />
-            <span>+ Cadastrar Tutor & Pet</span>
+            <span>Cadastrar Tutor & Pet</span>
+          </button>
+          <button
+            onClick={() => setReloadKey((value) => value + 1)}
+            className="p-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-500 rounded-xl"
+            title="Atualizar painel"
+          >
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* 4 Stat Cards */}
+      {error && (
+        <div className="bg-white rounded-2xl border border-red-200 shadow-2xs p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">Falha ao carregar a agenda</p>
+            <p className="text-xs text-slate-500 mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Consultas Hoje */}
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -84,21 +220,13 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 font-mono">38</span>
+            <span className="text-2xl font-bold text-slate-900 font-mono">
+              {todayAppointments.length}
+            </span>
             <span className="text-xs text-slate-500 font-medium">agendamentos</span>
-          </div>
-          <div className="mt-2.5 flex items-center gap-2 text-[11px] text-slate-500">
-            <span className="flex items-center gap-1 font-medium">
-              <span className="w-2 h-2 rounded-full bg-teal-600" /> 8 finalizadas
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1 font-medium">
-              <span className="w-2 h-2 rounded-full bg-blue-500" /> 6 em andamento
-            </span>
           </div>
         </div>
 
-        {/* Card 2: Sala de Espera */}
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -109,65 +237,43 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 font-mono">5</span>
-            <span className="text-xs text-slate-500 font-medium">pets presentes</span>
-          </div>
-          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span>
-              Tempo médio: <strong>12 min</strong> de espera
-            </span>
+            <span className="text-2xl font-bold text-slate-900 font-mono">{waiting.length}</span>
+            <span className="text-xs text-slate-500 font-medium">pets aguardando</span>
           </div>
         </div>
 
-        {/* Card 3: Acerto Recepção */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs cursor-pointer hover:border-teal-300 transition-colors"
-          onClick={() => onNavigate('reception-checkout')}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-              Acerto Recepção
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-              <CreditCard className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 font-mono">3</span>
-            <span className="text-xs text-slate-500 font-medium">atendimentos</span>
-          </div>
-          <div className="mt-2.5 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Prontos p/ cobrança</span>
-            <span className="text-[#0e5a60] font-bold underline">Ver fila (R$ 1.480)</span>
-          </div>
-        </div>
-
-        {/* Card 4: Emergências / Triagem */}
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-              Emergências / Triagem
+              Check-ins Hoje
             </span>
-            <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#0e5a60] flex items-center justify-center">
-              <AlertCircle className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 font-mono">0</span>
-            <span className="text-xs text-slate-500 font-medium">casos críticos</span>
+            <span className="text-2xl font-bold text-slate-900 font-mono">{checkInsToday}</span>
+            <span className="text-xs text-slate-500 font-medium">confirmados na recepção</span>
           </div>
-          <div className="mt-2.5 flex items-center gap-1.5 text-[11px]">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-bold">
-              Fluxo Normal / Estável
+        </div>
+
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              Atendimentos Realizados
             </span>
-            <span className="text-slate-400">Triagem 100% livre</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 font-mono">{completedToday}</span>
+            <span className="text-xs text-slate-500 font-medium">concluídos hoje</span>
           </div>
         </div>
       </div>
 
-      {/* Main 2-Column Split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Fila de Espera */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden flex flex-col justify-between">
           <div>
             <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -180,136 +286,123 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                     Fila de Espera (Aguardando Atendimento)
                   </h2>
                   <p className="text-[11px] text-slate-400">
-                    Ordene os chamados aos consultórios e confira status de triagem
+                    Pacientes com check-in realizado no serviço de agendamento
                   </p>
                 </div>
               </div>
-
-              {/* Segmented Filter */}
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`px-3 py-1 rounded-lg transition-colors ${
-                    filter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
-                  }`}
-                >
-                  Todos ({queue.length})
-                </button>
-                <button
-                  onClick={() => setFilter('triaged')}
-                  className={`px-3 py-1 rounded-lg transition-colors ${
-                    filter === 'triaged' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
-                  }`}
-                >
-                  Com Triagem (3)
-                </button>
-              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
+                {waiting.length} na fila
+              </span>
             </div>
 
-            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/70 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   <tr>
-                    <th className="py-3 px-5">Paciente & Raça</th>
-                    <th className="py-3 px-4">Tutor / Contato</th>
-                    <th className="py-3 px-4">Veterinário Destino</th>
-                    <th className="py-3 px-4">Chegada</th>
-                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-5">Paciente</th>
+                    <th className="py-3 px-4">Tutor</th>
+                    <th className="py-3 px-4">Veterinário</th>
+                    <th className="py-3 px-4">Check-in</th>
                     <th className="py-3 px-4 text-center">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredQueue.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                      {/* Pet */}
-                      <td className="py-3.5 px-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0 border border-amber-200">
-                            {item.petName[0]}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-900 text-sm">{item.petName}</span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-50 text-teal-700 font-semibold">
-                                {item.species}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400">
-                              {item.breed} • {item.age}
-                            </p>
-                          </div>
+                  {isLoading && (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-4 border-[#0e5a60] border-t-transparent rounded-full animate-spin" />
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            Carregando fila de espera...
+                          </span>
                         </div>
                       </td>
+                    </tr>
+                  )}
 
-                      {/* Tutor */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-bold text-slate-800">{item.tutorName}</p>
-                        <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {item.tutorPhone}
+                  {!isLoading && !error && waiting.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-10 text-center">
+                        <p className="text-sm font-bold text-slate-900">
+                          Nenhum paciente aguardando
                         </p>
-                      </td>
-
-                      {/* Vet & Room */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-bold text-slate-800">{item.vetName}</p>
-                        <p className="text-[11px] text-teal-700 font-medium">{item.room}</p>
-                      </td>
-
-                      {/* Arrival */}
-                      <td className="py-3.5 px-4">
-                        <p className="font-bold text-slate-800 font-mono">{item.arrivalTime}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          Há {item.waitingMinutes} min
+                        <p className="text-xs text-slate-500 mt-1">
+                          Faça o check-in de um agendamento para colocá-lo na fila.
                         </p>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                            item.status === 'Triagem Concluída'
-                              ? 'bg-teal-50 text-[#0e5a60]'
-                              : item.status === 'Chamado!' || item.status === 'Entrando na Sala'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold'
-                              : 'bg-amber-50 text-amber-800'
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-
-                      {/* Action */}
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => {
-                            if (item.petName === 'Thor') {
-                              onNavigate('vet-queue');
-                            } else {
-                              alert(`Notificação enviada para o consultório sobre ${item.petName}`);
-                            }
-                          }}
-                          className="px-2.5 py-1 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                        >
-                          Chamar
-                        </button>
                       </td>
                     </tr>
-                  ))}
+                  )}
+
+                  {!isLoading &&
+                    !error &&
+                    waiting.map((item) => {
+                      const animal = animals[item.animalId];
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                                <PawPrint className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 text-sm">
+                                  {animal?.nome ?? `Animal #${item.animalId}`}
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                  {animal
+                                    ? `${animal.especie}${animal.raca ? ` • ${animal.raca}` : ''}`
+                                    : `Tutor #${item.tutorId ?? '—'}`}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <p className="font-bold text-slate-800">
+                              {animal?.tutorNome ?? `Tutor #${item.tutorId ?? '—'}`}
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Agendamento #{String(item.id).padStart(4, '0')}
+                            </p>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <p className="font-bold text-slate-800">
+                              Veterinário #{item.veterinarioId}
+                            </p>
+                            <p className="text-[11px] text-teal-700 font-medium">
+                              {formatHora(item.horaInicio)} – {formatHora(item.horaFim)}
+                            </p>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <p className="font-bold text-slate-800 font-mono">
+                              {formatDateTime(item.horarioCheckin)}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">Check-in</p>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <button
+                              onClick={() => onNavigate('vet-queue')}
+                              className="px-2.5 py-1 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                            >
+                              Chamar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           </div>
 
           <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-            <span>Exibindo 5 de 5 pacientes em espera presencial</span>
+            <span>{waiting.length} paciente(s) aguardando atendimento hoje</span>
             <span className="flex items-center gap-1 text-slate-500">
-              <RotateCw className="w-3.5 h-3.5" /> Atualização automática em 30s
+              <RefreshCw className="w-3.5 h-3.5" /> Use o botão atualizar para recarregar
             </span>
           </div>
         </div>
 
-        {/* Right Col: Próximos Agendamentos (2 Horas) */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -320,118 +413,63 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                 </h2>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-teal-50 text-[#0e5a60] text-[11px] font-bold">
-                2 Horas
+                Hoje
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-2 mb-4">
-              Confirmações automáticas via WhatsApp e previsões de chegada.
-            </p>
 
-            {/* Timeline items */}
-            <div className="space-y-4">
-              {/* Item 1 */}
-              <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 relative pl-4">
-                <div className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-emerald-500 rounded-r" />
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold font-mono text-slate-900 text-xs">14:45</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">
-                    <Check className="w-3 h-3" /> Confirmado WhatsApp
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">Pipoca (Shih-tzu)</p>
-                    <p className="text-[11px] text-slate-500">Tutor: Claudia Ramos</p>
-                    <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
-                      Dr. Ricardo Mendes • Consulta Geral
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => alert('Check-in de Pipoca realizado com sucesso!')}
-                    className="px-2.5 py-1 bg-[#0e5a60] text-white rounded-lg text-xs font-semibold shadow-2xs"
-                  >
-                    Check-in
-                  </button>
-                </div>
-              </div>
+            <div className="space-y-4 mt-4">
+              {isLoading && (
+                <p className="text-xs text-slate-500">Carregando agendamentos...</p>
+              )}
 
-              {/* Item 2: Atrasado */}
-              <div className="p-3.5 rounded-2xl border border-rose-100 bg-rose-50/30 relative pl-4">
-                <div className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-rose-500 rounded-r" />
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold font-mono text-rose-900 text-xs">15:00</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800">
-                    ⚠ Atrasado (15 min)
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">Apolo (Border Collie)</p>
-                    <p className="text-[11px] text-slate-500">Tutor: Marcelo Gusmão</p>
-                    <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
-                      Dra. Camila Duarte • Vacina Antirrábica
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => alert('Ligando para Marcelo Gusmão: (11) 98765-4321')}
-                    className="px-2.5 py-1 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1"
-                  >
-                    <Phone className="w-3 h-3" /> Ligar
-                  </button>
-                </div>
-              </div>
+              {!isLoading && !error && upcoming.length === 0 && (
+                <p className="text-xs text-slate-500">
+                  Nenhum agendamento pendente para o restante do dia.
+                </p>
+              )}
 
-              {/* Item 3 */}
-              <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 relative pl-4">
-                <div className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-slate-300 rounded-r" />
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold font-mono text-slate-900 text-xs">15:30</span>
-                  <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
-                    Check-in Pendente
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">Mingau (Persa)</p>
-                    <p className="text-[11px] text-slate-500">Tutora: Juliana Peres</p>
-                    <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
-                      Dr. Fernando Costa • Retorno Ultrassom
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => alert('Check-in de Mingau realizado!')}
-                    className="px-2.5 py-1 bg-[#0e5a60] text-white rounded-lg text-xs font-semibold shadow-2xs"
-                  >
-                    Check-in
-                  </button>
-                </div>
-              </div>
+              {!isLoading &&
+                !error &&
+                upcoming.map((item) => {
+                  const animal = animals[item.animalId];
 
-              {/* Item 4 */}
-              <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 relative pl-4">
-                <div className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-emerald-500 rounded-r" />
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold font-mono text-slate-900 text-xs">16:00</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">
-                    <Check className="w-3 h-3" /> Confirmado WhatsApp
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">Max (Labrador)</p>
-                    <p className="text-[11px] text-slate-500">Tutor: Sergio F.</p>
-                    <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
-                      Dr. Ricardo Mendes • Consulta Dermatológica
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => alert('Check-in de Max realizado!')}
-                    className="px-2.5 py-1 bg-[#0e5a60] text-white rounded-lg text-xs font-semibold shadow-2xs"
-                  >
-                    Check-in
-                  </button>
-                </div>
-              </div>
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 relative pl-4"
+                    >
+                      <div className="absolute left-0 top-3.5 bottom-3.5 w-1 bg-emerald-500 rounded-r" />
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold font-mono text-slate-900 text-xs">
+                          {formatHora(item.horaInicio)}
+                        </span>
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                          {item.status === 'AGENDADO' ? 'Aguardando check-in' : item.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 gap-2">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            {animal?.nome ?? `Animal #${item.animalId}`}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {animal?.tutorNome ?? `Tutor #${item.tutorId ?? '—'}`}
+                          </p>
+                          <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
+                            Veterinário #{item.veterinarioId}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleCheckIn(item)}
+                          disabled={pendingCheckInId === item.id}
+                          className="px-2.5 py-1 bg-[#0e5a60] text-white rounded-lg text-xs font-semibold shadow-2xs disabled:opacity-50"
+                        >
+                          {pendingCheckInId === item.id ? '...' : 'Check-in'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
 
@@ -440,7 +478,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
               onClick={() => onNavigate('reception-schedule')}
               className="text-xs font-bold text-[#0e5a60] hover:underline inline-flex items-center gap-1"
             >
-              <span>Visualizar Agenda Completa do Dia</span>
+              <span>Visualizar Agenda Completa</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>

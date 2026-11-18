@@ -5,12 +5,17 @@ import {
   Eye,
   EyeOff,
   ArrowLeft,
+  ArrowRight,
   Check,
   Circle,
   ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
+import { authService } from '../../services/authService';
+import { getApiErrorMessage } from '../../services/apiError';
+import { vetHugDogUrl } from '../../assets/images';
 
 interface ResetPasswordViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -24,11 +29,17 @@ const PASSWORD_LEVELS = [
 ];
 
 export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate }) => {
+  const [token, setToken] = useState(
+    () => new URLSearchParams(window.location.search).get('token') || ''
+  );
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [resetDone, setResetDone] = useState(false);
 
   const criteria = [
     { key: 'length', label: 'Mínimo de 8 caracteres', met: newPassword.length >= 8 },
@@ -51,17 +62,27 @@ export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate
   const confirmTouched = confirmPassword.length > 0;
   const passwordsMatch = confirmTouched && newPassword === confirmPassword;
   const passwordsMismatch = confirmTouched && !passwordsMatch;
-  const isFormValid = score === 4 && passwordsMatch;
+  const isFormValid = token.trim().length > 0 && score === 4 && passwordsMatch;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) return;
 
+    setErrorMessage('');
     setIsSubmitting(true);
-    setTimeout(() => {
+
+    try {
+      const message = await authService.resetPassword(token, newPassword, confirmPassword);
+      setSuccessMessage(message);
+      setResetDone(true);
+    } catch (err) {
+      console.error('[MaisVet] Falha ao redefinir senha:', err);
+      setErrorMessage(
+        getApiErrorMessage(err, 'Não foi possível redefinir sua senha. Tente novamente.')
+      );
+    } finally {
       setIsSubmitting(false);
-      onNavigate('auth-login');
-    }, 600);
+    }
   };
 
   const inputClass =
@@ -72,7 +93,7 @@ export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate
       {/* Left: Brand / Hero (menor que o formulário) */}
       <div className="relative hidden lg:flex lg:w-[34%] xl:w-[36%] flex-col justify-between overflow-hidden">
         <img
-          src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+          src={vetHugDogUrl}
           alt="Veterinária abraçando cão Golden Retriever na clínica"
           className="absolute inset-0 h-full w-full object-cover"
           referrerPolicy="no-referrer"
@@ -129,7 +150,65 @@ export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_24px_60px_-24px_rgba(14,90,96,0.35)] sm:p-8">
+              {resetDone ? (
+                <div className="py-2 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <Check className="h-6 w-6" />
+                  </div>
+                  <h3 className="mt-4 font-serif text-lg font-bold text-[#0e5a60]">
+                    Senha redefinida
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    {successMessage ||
+                      'Sua senha foi alterada com sucesso. Agora você já pode entrar com a nova senha.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('auth-login')}
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a]"
+                  >
+                    <span>Ir para o login</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
+                {errorMessage && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
+                  >
+                    <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    htmlFor="reset-token"
+                    className="mb-1.5 block text-xs font-semibold text-slate-700"
+                  >
+                    Código de recuperação
+                  </label>
+                  <div className="relative">
+                    <Key className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="reset-token"
+                      type="text"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Cole o código recebido por e-mail"
+                      autoComplete="one-time-code"
+                      required
+                      className={`${inputClass} border-slate-200 focus:border-[#0e5a60] focus:ring-[#0e5a60]/10`}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    O código faz parte do link enviado para o seu e-mail.
+                  </p>
+                </div>
+
                 <div>
                   <label
                     htmlFor="reset-password"
@@ -273,6 +352,7 @@ export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate
                   </p>
                 )}
               </form>
+              )}
             </div>
 
             <button

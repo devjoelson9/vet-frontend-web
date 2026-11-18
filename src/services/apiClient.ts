@@ -13,6 +13,7 @@ export interface SpringBootApiError {
 }
 
 export const AUTH_TOKEN_KEY = 'maisvet_access_token';
+export const REFRESH_TOKEN_KEY = 'maisvet_refresh_token';
 export const USER_SESSION_KEY = 'maisvet_user_session';
 export const GATEWAY_URL_KEY = 'maisvet_gateway_url';
 
@@ -73,6 +74,26 @@ export function setStoredAuthToken(token: string | null): void {
     }
   } catch (err) {
     console.error('Erro ao armazenar token:', err);
+  }
+}
+
+export function getStoredRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredRefreshToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
+  } catch (err) {
+    console.error('Erro ao armazenar refresh token:', err);
   }
 }
 
@@ -140,9 +161,77 @@ export async function checkGatewayHealth(): Promise<{
 /**
  * Cliente HTTP unificado preparado para o Gateway Spring Boot
  */
-export async function apiClient<T>(
+const AUTH_ENDPOINTS_WITHOUT_REFRESH =
+  /^\/?v1\/auth\/(login|refresh|register-tutor|forgot-password|reset-password)/;
+
+let refreshPromise: Promise<string | null> | null = null;
+
+async function requestNewAccessToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    const refreshToken = getStoredRefreshToken();
+    if (!refreshToken) {
+      return null;
+    }
+
+    try {
+      const baseUrl = getGatewayBaseUrl().replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/v1/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = (await response.json()) as {
+        token?: string;
+        accessToken?: string;
+        refreshToken?: string;
+      };
+
+      const token = data.token || data.accessToken;
+      if (!token) {
+        return null;
+      }
+
+      setStoredAuthToken(token);
+      if (data.refreshToken) {
+        setStoredRefreshToken(data.refreshToken);
+      }
+
+      return token;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+function notifyUnauthorized(): void {
+  setStoredAuthToken(null);
+  setStoredRefreshToken(null);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maisvet:unauthorized'));
+  }
+}
+
+async function performRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit,
+  allowRefresh: boolean
 ): Promise<T> {
   const token = getStoredAuthToken();
   const baseUrl = getGatewayBaseUrl().replace(/\/+$/, '');
@@ -166,12 +255,14 @@ export async function apiClient<T>(
       headers,
     });
 
-    if (response.status === 401) {
-      // Token expirou ou inválido no Spring Security
-      setStoredAuthToken(null);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('maisvet:unauthorized'));
+    if (response.status === 401 && allowRefresh) {
+      const newToken = await requestNewAccessToken();
+      if (newToken) {
+        return performRequest<T>(endpoint, options, false);
       }
+      notifyUnauthorized();
+    } else if (response.status === 401) {
+      notifyUnauthorized();
     }
 
     if (!response.ok) {
@@ -201,4 +292,12 @@ export async function apiClient<T>(
     }
     throw error;
   }
+}
+
+export async function apiClient<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const allowRefresh = !AUTH_ENDPOINTS_WITHOUT_REFRESH.test(endpoint);
+  return performRequest<T>(endpoint, options, allowRefresh);
 }

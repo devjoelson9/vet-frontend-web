@@ -1,7 +1,9 @@
 import React from 'react';
+import { doctorAvatarUrl } from '../../assets/images';
 import {
   LayoutDashboard,
   LogOut,
+  PawPrint,
   Stethoscope,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
@@ -57,6 +59,17 @@ export const VetLayout: React.FC<VetLayoutProps> = ({
                 <LayoutDashboard className="w-4 h-4 text-[#0e5a60]" />
                 <span>Dashboard</span>
               </button>
+              <button
+                onClick={() => onNavigate('vet-patients')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  currentScreen === 'vet-patients'
+                    ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <PawPrint className="w-4 h-4 text-[#0e5a60]" />
+                <span>Pacientes</span>
+              </button>
             </div>
           </div>
         </div>
@@ -65,14 +78,18 @@ export const VetLayout: React.FC<VetLayoutProps> = ({
         <div className="p-3 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/src/assets/images/doctor_avatar_1791553366869.jpg"
-              alt="Dr. Ricardo Mendes"
+              src={doctorAvatarUrl}
+              alt={user?.name || 'Médico Veterinário'}
               className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
               referrerPolicy="no-referrer"
             />
             <div className="truncate">
-              <p className="text-xs font-bold text-slate-800 truncate">Dr. Ricardo Mendes</p>
-              <p className="text-[10px] text-slate-400 truncate">r.mendes@pawcare.com.br</p>
+              <p className="text-xs font-bold text-slate-800 truncate">
+                {user?.name || 'Médico Veterinário'}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {user?.email || 'vet@maisvet.com'}
+              </p>
             </div>
           </div>
           <button
@@ -105,14 +122,15 @@ export const VetLayout: React.FC<VetLayoutProps> = ({
             className="flex items-center gap-3 p-1 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
           >
             <img
-              src="/src/assets/images/doctor_avatar_1791553366869.jpg"
-              alt="Dr. Ricardo Mendes"
+              src={doctorAvatarUrl}
+              alt={user?.name || 'Médico Veterinário'}
               className="w-9 h-9 rounded-full object-cover border border-teal-200"
               referrerPolicy="no-referrer"
             />
             <div className="text-left hidden sm:block leading-tight">
               <p className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                Dr. Ricardo Mendes <LogOut className="w-3.5 h-3.5 text-slate-400 hover:text-red-600" />
+                {user?.name || 'Médico Veterinário'}{' '}
+                <LogOut className="w-3.5 h-3.5 text-slate-400 hover:text-red-600" />
               </p>
               <p className="text-[10px] text-slate-400 font-medium">Médico Veterinário</p>
             </div>

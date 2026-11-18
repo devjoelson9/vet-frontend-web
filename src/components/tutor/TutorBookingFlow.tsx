@@ -1,45 +1,245 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Calendar,
   Clock,
   CheckCircle2,
-  Star,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
   User,
   ArrowRight,
   Info,
+  PawPrint,
+  AlertCircle,
 } from 'lucide-react';
 import { AppScreen } from '../../types';
+import type { AnimalApi } from '../../types/api';
+import { animalService } from '../../services/animalService';
+import {
+  veterinarioService,
+  type VeterinarioResumoApi,
+} from '../../services/veterinarioService';
+import { getApiErrorMessage } from '../../services/apiError';
+import {
+  agendamentoService,
+  formatHora,
+  toIsoDate,
+  type HorarioDisponivelApi,
+} from '../../services/agendamentoService';
+import { mapAnimalToPet } from '../../utils/identityMappers';
 
 interface TutorBookingFlowProps {
   onNavigate: (screen: AppScreen) => void;
 }
 
+function buildMonthDays(monthCursor: Date): Array<number | null> {
+  const firstWeekday = new Date(
+    monthCursor.getFullYear(),
+    monthCursor.getMonth(),
+    1
+  ).getDay();
+  const daysInMonth = new Date(
+    monthCursor.getFullYear(),
+    monthCursor.getMonth() + 1,
+    0
+  ).getDate();
+
+  return [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+}
+
+function formatLongDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(year, (month ?? 1) - 1, day ?? 1);
+
+  return date.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }) => {
-  const [selectedVet, setSelectedVet] = useState<'ricardo' | 'camila' | 'any'>('ricardo');
-  const [selectedDay, setSelectedDay] = useState('28');
-  const [selectedTime, setSelectedTime] = useState('10:30');
-  const [notes, setNotes] = useState(
-    'Thor tem apresentado coceira intensa na orelha direita e vermelhidão na região das patas há 3 dias...'
-  );
-  const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [pets, setPets] = useState<AnimalApi[]>([]);
+  const [isLoadingPets, setIsLoadingPets] = useState(true);
+  const [petsError, setPetsError] = useState('');
+  const [animalId, setAnimalId] = useState('');
 
-  const morningTimes = ['09:00', '09:45', '10:30', '11:15'];
-  const afternoonTimes = ['14:00', '15:15', '16:00', '17:30'];
+  const [vets, setVets] = useState<VeterinarioResumoApi[]>([]);
+  const [veterinarioId, setVeterinarioId] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => toIsoDate(new Date()));
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
-  const handleFinishBooking = () => {
-    setBookingConfirmed(true);
-    setTimeout(() => {
-      alert('Agendamento confirmado com sucesso! Enviamos a confirmação por SMS e WhatsApp.');
-      onNavigate('tutor-home');
-    }, 1200);
+  const [slots, setSlots] = useState<HorarioDisponivelApi[]>([]);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotError, setSlotError] = useState('');
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const todayIso = toIsoDate(new Date());
+  const monthDays = buildMonthDays(monthCursor);
+
+  useEffect(() => {
+    veterinarioService
+      .listar()
+      .then(setVets)
+      .catch(() => setVets([]));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPets() {
+      setIsLoadingPets(true);
+      setPetsError('');
+
+      try {
+        const result = await animalService.listMine(0, 50);
+
+        if (cancelled) return;
+
+        setPets(result.content);
+        setAnimalId(result.content[0] ? String(result.content[0].id) : '');
+      } catch (error) {
+        if (cancelled) return;
+
+        setPets([]);
+        setPetsError(
+          getApiErrorMessage(error, 'Não foi possível carregar seus pets cadastrados.')
+        );
+      } finally {
+        if (!cancelled) setIsLoadingPets(false);
+      }
+    }
+
+    loadPets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const vetId = Number(veterinarioId);
+
+    if (!vetId || !selectedDate) {
+      setSlots([]);
+      setSelectedTime('');
+      setSlotError('');
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSlots(true);
+    setSlotError('');
+    setSelectedTime('');
+
+    agendamentoService
+      .horariosDisponiveis(vetId, selectedDate)
+      .then((result) => {
+        if (!cancelled) setSlots(result);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSlots([]);
+        setSlotError(
+          getApiErrorMessage(error, 'Não foi possível consultar os horários disponíveis.')
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSlots(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [veterinarioId, selectedDate]);
+
+  const handleConfirm = async () => {
+    const vetId = Number(veterinarioId);
+
+    if (!animalId || !vetId || !selectedDate || !selectedTime) {
+      setSubmitError('Escolha o pet, o veterinário, a data e um horário disponível.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      await agendamentoService.criar({
+        animalId: Number(animalId),
+        veterinarioId: vetId,
+        data: selectedDate,
+        horaInicio: selectedTime,
+      });
+
+      setIsSuccess(true);
+    } catch (error) {
+      setSubmitError(getApiErrorMessage(error, 'Não foi possível concluir o agendamento.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const selectedPet = pets.find((pet) => String(pet.id) === animalId);
+  const petView = selectedPet ? mapAnimalToPet(selectedPet) : null;
+  const morningSlots = slots.filter((item) => Number(item.horaInicio.slice(0, 2)) < 12);
+  const afternoonSlots = slots.filter((item) => Number(item.horaInicio.slice(0, 2)) >= 12);
+
+  if (isSuccess) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="bg-white rounded-3xl border border-emerald-200 shadow-2xs p-10 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 font-serif mt-4">
+            Agendamento confirmado
+          </h1>
+          <p className="text-xs text-slate-500 mt-2">
+            {selectedPet?.nome ?? 'Seu pet'} foi agendado para{' '}
+            <strong className="text-slate-800 capitalize">{formatLongDate(selectedDate)}</strong>{' '}
+            às <strong className="text-slate-800 font-mono">{formatHora(selectedTime)}</strong>{' '}
+            com {vets.find((vet) => String(vet.id) === veterinarioId)?.nomeCompleto ?? 'o veterinário selecionado'}.
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            O agendamento já aparece na agenda da recepção e no seu painel.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
+            <button
+              onClick={() => onNavigate('tutor-home')}
+              className="px-5 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs"
+            >
+              Voltar ao início
+            </button>
+            <button
+              onClick={() => {
+                setIsSuccess(false);
+                setSelectedTime('');
+          }}
+              className="px-5 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl"
+            >
+              Fazer outro agendamento
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Breadcrumbs */}
       <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
         <span>Portal do Tutor</span>
         <span>›</span>
@@ -48,36 +248,34 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
         <span className="text-slate-800 font-semibold">Novo Agendamento Online</span>
       </div>
 
-      {/* Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 font-serif">
           Agende uma Consulta ou Vacina
         </h1>
         <div className="flex flex-wrap items-center gap-4 mt-1 text-xs text-slate-500">
           <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-teal-600" /> Processo rápido e descomplicado • Conclusão em cerca de 2 minutos
+            <Clock className="w-3.5 h-3.5 text-teal-600" />
+            Horários reais da disponibilidade do veterinário
           </span>
           <span>•</span>
           <span className="flex items-center gap-1 text-teal-700 font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5" /> Confirmação imediata por SMS & E-mail
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Confirmação imediata na agenda
           </span>
         </div>
       </div>
 
-      {/* Stepper (3 steps) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Step 1: Concluída */}
         <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 flex items-center gap-3">
           <div className="w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-teal-700">Etapa 1 • Concluída</p>
-            <p className="text-xs font-bold text-slate-900">1. Paciente & Especialidade</p>
+            <p className="text-[10px] uppercase font-bold text-teal-700">Etapa 1</p>
+            <p className="text-xs font-bold text-slate-900">1. Paciente</p>
           </div>
         </div>
 
-        {/* Step 2: Atual */}
         <div className="p-3.5 rounded-2xl bg-white border-2 border-[#0e5a60] flex items-center gap-3 shadow-2xs">
           <div className="w-6 h-6 rounded-full bg-[#0e5a60] text-white flex items-center justify-center text-xs font-bold shrink-0">
             2
@@ -88,199 +286,153 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
           </div>
         </div>
 
-        {/* Step 3: Final */}
         <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
           <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0">
             3
           </div>
           <div>
             <p className="text-[10px] uppercase font-bold text-slate-400">Etapa Final</p>
-            <p className="text-xs font-bold text-slate-500">3. Revisão & Confirmação</p>
+            <p className="text-xs font-bold text-slate-500">3. Confirmação</p>
           </div>
         </div>
       </div>
 
-      {/* Selected Pet & Service Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <img
-            src="/src/assets/images/pet_golden_thor_1791553348232.jpg"
-            alt="Thor"
-            className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
-            referrerPolicy="no-referrer"
-          />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-sm">Thor</span>
-              <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-800">
-                Golden Retriever
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Macho • 4 anos • 32 kg • Microchip 981.028
-            </p>
-          </div>
+      {petsError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{petsError}</span>
         </div>
+      )}
 
-        <div className="flex items-center gap-4 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-6">
-          <div>
-            <p className="text-[10px] text-slate-400 uppercase font-bold">Serviço Selecionado</p>
-            <p className="text-xs font-bold text-slate-900">
-              Consulta Clínica Especializada — Dermatologia
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
+        <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <PawPrint className="w-4 h-4 text-[#0e5a60]" />
+          Selecione o Paciente
+        </h2>
+
+        {isLoadingPets ? (
+          <p className="text-xs text-slate-500">Carregando seus pets...</p>
+        ) : pets.length === 0 ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              Você ainda não possui pets cadastrados para agendar.
             </p>
-            <p className="text-[11px] font-mono text-[#0e5a60] font-bold">
-              40 min • R$ 180,00
-            </p>
+            <button
+              onClick={() => onNavigate('tutor-pets')}
+              className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cadastrar pet
+            </button>
           </div>
-          <button
-            onClick={() => alert('Alterar serviço')}
-            className="text-xs text-slate-500 hover:text-slate-800 font-semibold underline shrink-0"
-          >
-            Alterar
-          </button>
-        </div>
+        ) : (
+          <>
+            <select
+              value={animalId}
+              onChange={(event) => setAnimalId(event.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
+            >
+              {pets.map((pet) => (
+                <option key={pet.id} value={pet.id}>
+                  {pet.nome} • {pet.especie}
+                  {pet.raca ? ` / ${pet.raca}` : ''}
+                </option>
+              ))}
+            </select>
+
+            {petView && (
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-teal-50/60 border border-teal-200/70">
+                <div className="w-10 h-10 rounded-xl bg-teal-100 text-[#0e5a60] flex items-center justify-center shrink-0">
+                  <PawPrint className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">{petView.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {petView.breed} • {petView.gender} • {petView.age}
+                    {petView.weight > 0 ? ` • ${petView.weight} kg` : ''}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Section 1: Escolha o Médico Veterinário */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <User className="w-4 h-4 text-[#0e5a60]" />
-            Escolha o Médico Veterinário
+            Veterinário Responsável
           </h2>
-          <span className="text-xs text-slate-400 font-mono">Passo 2.1 de 2.3</span>
+          <span className="text-xs text-slate-400 font-mono">Passo 2.1</span>
         </div>
-        <p className="text-xs text-slate-400">
-          Profissionais qualificados com foco no histórico do paciente.
-        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Dr. Ricardo */}
-          <div
-            onClick={() => setSelectedVet('ricardo')}
-            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              selectedVet === 'ricardo'
-                ? 'border-[#0e5a60] bg-teal-50/40 ring-2 ring-[#0e5a60] shadow-2xs'
-                : 'border-slate-200 hover:border-slate-300'
-            }`}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">
+            Escolha o veterinário
+          </label>
+          <select
+            value={veterinarioId}
+            onChange={(event) => setVeterinarioId(event.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
-                {selectedVet === 'ricardo' ? '✓ Selecionado' : ''}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <img
-                src="/src/assets/images/doctor_avatar_1791553366869.jpg"
-                alt="Dr. Ricardo Mendes"
-                className="w-11 h-11 rounded-full object-cover border border-slate-200"
-                referrerPolicy="no-referrer"
-              />
-              <div>
-                <p className="text-xs font-bold text-slate-900">Dr. Ricardo Mendes</p>
-                <p className="text-[10px] text-slate-400 font-mono">CRMV-SP 31.844</p>
-                <p className="text-[10px] text-slate-600">Dermatologia & Clínica Geral</p>
-              </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
-              <span className="flex items-center gap-1 font-bold text-amber-600">
-                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.9
-                <span className="text-slate-400 font-normal">(142 avaliações)</span>
-              </span>
-              <span className="text-slate-400 text-[10px]">• 9 anos de casa</span>
-            </div>
-            <p className="text-[10px] text-teal-700 font-bold mt-2">
-              • Primeira data: Amanhã (28/05)
+            <option value="">Selecione o veterinário...</option>
+            {vets.map((vet) => (
+              <option key={vet.id} value={vet.id}>
+                {vet.nomeCompleto}
+                {vet.especialidade ? ` • ${vet.especialidade}` : ''}
+                {vet.crmv ? ` • ${vet.crmv}` : ''}
+              </option>
+            ))}
+          </select>
+          {vets.length === 0 && (
+            <p className="text-[10px] text-amber-700 mt-1">
+              Nenhum veterinário ativo disponível no momento.
             </p>
-          </div>
-
-          {/* Dra. Camila */}
-          <div
-            onClick={() => setSelectedVet('camila')}
-            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              selectedVet === 'camila'
-                ? 'border-[#0e5a60] bg-teal-50/40 ring-2 ring-[#0e5a60] shadow-2xs'
-                : 'border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center gap-3 pt-4">
-              <div className="w-11 h-11 rounded-full bg-teal-100 text-[#0e5a60] font-bold text-xs flex items-center justify-center shrink-0">
-                CD
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-900">Dra. Camila Duarte</p>
-                <p className="text-[10px] text-slate-400 font-mono">CRMV-SP 28.115</p>
-                <p className="text-[10px] text-slate-600">Alergologia & Dermatologia</p>
-              </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
-              <span className="flex items-center gap-1 font-bold text-amber-600">
-                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> 4.95
-                <span className="text-slate-400 font-normal">(98 avaliações)</span>
-              </span>
-              <span className="text-slate-400 text-[10px]">• Mestre USP</span>
-            </div>
-            <p className="text-[10px] text-slate-500 font-medium mt-2">
-              • Disponível em 3 dias (30/05)
-            </p>
-          </div>
-
-          {/* Sem Preferência */}
-          <div
-            onClick={() => setSelectedVet('any')}
-            className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              selectedVet === 'any'
-                ? 'border-[#0e5a60] bg-teal-50/40 ring-2 ring-[#0e5a60] shadow-2xs'
-                : 'border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center gap-3 pt-4">
-              <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-900">Sem preferência</p>
-                <p className="text-[10px] text-teal-700 font-semibold">Primeiro Especialista Vago</p>
-                <p className="text-[10px] text-slate-500">Atendimento ágil & flexível</p>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-4 leading-relaxed">
-              Ideal caso você procure o horário mais conveniente hoje ou amanhã com qualquer um dos 4 dermatologistas do corpo clínico.
-            </p>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Section 2: Calendário e Horários */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-6 space-y-5">
         <div>
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-[#0e5a60]" />
-            Selecione o Dia e Horário com Dr. Ricardo Mendes
+            Selecione o Dia e o Horário
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Fuso horário de São Paulo (GMT-3). Duração estimada da sessão: 40 minutos.
+            Horários calculados a partir da disponibilidade do veterinário.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-          {/* Mini Calendar Left (5 cols) */}
           <div className="md:col-span-5 border border-slate-200/80 rounded-2xl p-4">
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
-              <span className="font-bold text-slate-800 text-xs">Maio de 2025</span>
+              <span className="font-bold text-slate-800 text-xs capitalize">
+                {monthCursor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </span>
               <div className="flex items-center gap-1">
-                <button className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                <button
+                  onClick={() =>
+                    setMonthCursor(
+                      new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1)
+                    )
+                  }
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1 hover:bg-slate-100 rounded text-slate-400">
+                <button
+                  onClick={() =>
+                    setMonthCursor(
+                      new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1)
+                    )
+                  }
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Days header */}
             <div className="grid grid-cols-7 text-center text-[10px] text-slate-400 font-bold mb-2">
               <span>Dom</span>
               <span>Seg</span>
@@ -291,187 +443,162 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
               <span>Sáb</span>
             </div>
 
-            {/* Calendar Days */}
             <div className="grid grid-cols-7 gap-1 text-center text-xs">
-              <span className="py-1 text-slate-300">27</span>
-              <span className="py-1 text-slate-300">28</span>
-              <span className="py-1 text-slate-300">29</span>
-              <span className="py-1 text-slate-300">30</span>
-              <span className="py-1 text-slate-400">1</span>
-              <span className="py-1 text-slate-400">2</span>
-              <span className="py-1 text-slate-400">3</span>
-              {/* Row 2 */}
-              <span className="py-1 text-slate-400">4</span>
-              <span className="py-1 text-slate-400">5</span>
-              <span className="py-1 text-slate-400">6</span>
-              <span className="py-1 text-slate-400">7</span>
-              <span className="py-1 text-slate-400">8</span>
-              <span className="py-1 text-slate-400">9</span>
-              <span className="py-1 text-slate-400">10</span>
-              {/* Row 3 */}
-              <span className="py-1 text-slate-400">11</span>
-              <span className="py-1 text-slate-400">12</span>
-              <span className="py-1 text-slate-400">13</span>
-              <span className="py-1 text-slate-400">14</span>
-              <span className="py-1 text-slate-400">15</span>
-              <span className="py-1 text-slate-400">16</span>
-              <span className="py-1 text-slate-400">17</span>
-              {/* Row 4 */}
-              <span className="py-1 text-slate-400">18</span>
-              <span className="py-1 text-slate-400">19</span>
-              <span className="py-1 text-slate-400">20</span>
-              <span className="py-1 text-slate-400">21</span>
-              <span className="py-1 text-slate-400">22</span>
-              <span className="py-1 text-slate-400">23</span>
-              <span className="py-1 text-slate-400">24</span>
-              {/* Row 5 with 28 selected */}
-              <span className="py-1 text-slate-400">25</span>
-              <span className="py-1 text-slate-400">26</span>
-              <span className="py-1 text-slate-400">27</span>
-              <button
-                onClick={() => setSelectedDay('28')}
-                className="py-1 bg-[#0e5a60] text-white rounded-lg font-bold font-mono"
-              >
-                28
-              </button>
-              <button
-                onClick={() => setSelectedDay('29')}
-                className="py-1 border border-slate-200 rounded-lg hover:bg-slate-50 font-mono"
-              >
-                29
-              </button>
-              <button
-                onClick={() => setSelectedDay('30')}
-                className="py-1 border border-slate-200 rounded-lg hover:bg-slate-50 font-mono"
-              >
-                30
-              </button>
-              <button
-                onClick={() => setSelectedDay('31')}
-                className="py-1 border border-slate-200 rounded-lg hover:bg-slate-50 font-mono"
-              >
-                31
-              </button>
+              {monthDays.map((day, index) => {
+                if (!day) return <span key={`empty-${index}`} />;
+
+                const isoDate = toIsoDate(
+                  new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day)
+                );
+                const isPast = isoDate < todayIso;
+                const isSelected = isoDate === selectedDate;
+
+                return (
+                  <button
+                    key={isoDate}
+                    type="button"
+                    disabled={isPast}
+                    onClick={() => setSelectedDate(isoDate)}
+                    className={`py-1 rounded-lg font-mono transition-all ${
+                      isSelected
+                        ? 'bg-[#0e5a60] text-white font-bold'
+                        : isPast
+                          ? 'text-slate-300 cursor-not-allowed'
+                          : 'border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="mt-4 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span>Quarta-feira, 28 de Maio</span>
-              <span className="text-[#0e5a60] font-bold">7 horários vagos</span>
+            <div className="mt-4 pt-2 border-t border-slate-100 text-[11px] text-slate-500 capitalize">
+              {formatLongDate(selectedDate)}
             </div>
           </div>
 
-          {/* Time Slots Right (7 cols) */}
           <div className="md:col-span-7 space-y-4">
-            {/* Manhã */}
-            <div>
-              <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                <span>☀️ Manhã</span>
-                <span className="text-slate-400 text-[10px] font-normal">(08:00 às 12:00)</span>
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {morningTimes.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setSelectedTime(t)}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
-                      selectedTime === t
-                        ? 'bg-[#0e5a60] text-white shadow-2xs font-bold'
-                        : 'border border-slate-200 hover:border-slate-300 text-slate-700'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+            {!veterinarioId && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500">
+                Selecione o veterinário para consultar os horários disponíveis.
               </div>
-            </div>
+            )}
 
-            {/* Tarde */}
-            <div>
-              <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                <span>⛅ Tarde</span>
-                <span className="text-slate-400 text-[10px] font-normal">(13:00 às 18:30)</span>
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {afternoonTimes.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setSelectedTime(t)}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
-                      selectedTime === t
-                        ? 'bg-[#0e5a60] text-white shadow-2xs font-bold'
-                        : 'border border-slate-200 hover:border-slate-300 text-slate-700'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+            {isLoadingSlots && (
+              <p className="text-xs text-slate-500">Consultando horários disponíveis...</p>
+            )}
+
+            {slotError && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-800">
+                {slotError}
               </div>
-            </div>
+            )}
 
-            {/* Reservation countdown banner */}
-            <div className="p-3.5 rounded-2xl bg-teal-50 border border-teal-200/80 flex items-center justify-between text-xs">
-              <span className="text-slate-700">
-                Horário reservado por 15 minutos:{' '}
-                <strong className="text-slate-900">
-                  {selectedDay}/05/2025 às {selectedTime} (Quarta-feira)
-                </strong>
-              </span>
-              <span className="px-2 py-0.5 rounded bg-white text-[#0e5a60] font-bold border border-teal-200 text-[11px]">
-                Unidade Jardins
-              </span>
-            </div>
+            {!isLoadingSlots && !slotError && veterinarioId && slots.length === 0 && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500">
+                Nenhum horário disponível para esta data. Tente outro dia ou outro veterinário.
+              </div>
+            )}
+
+            {morningSlots.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                  <span>☀️ Manhã</span>
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {morningSlots.map((slot) => (
+                    <button
+                      key={slot.horaInicio}
+                      type="button"
+                      onClick={() => setSelectedTime(slot.horaInicio)}
+                      className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
+                        selectedTime === slot.horaInicio
+                          ? 'bg-[#0e5a60] text-white shadow-2xs font-bold'
+                          : 'border border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      {formatHora(slot.horaInicio)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {afternoonSlots.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                  <span>⛅ Tarde</span>
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {afternoonSlots.map((slot) => (
+                    <button
+                      key={slot.horaInicio}
+                      type="button"
+                      onClick={() => setSelectedTime(slot.horaInicio)}
+                      className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
+                        selectedTime === slot.horaInicio
+                          ? 'bg-[#0e5a60] text-white shadow-2xs font-bold'
+                          : 'border border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      {formatHora(slot.horaInicio)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedTime && (
+              <div className="p-3.5 rounded-2xl bg-teal-50 border border-teal-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-slate-700">
+                  Horário selecionado:{' '}
+                  <strong className="text-slate-900 capitalize">
+                    {formatLongDate(selectedDate)}
+                  </strong>{' '}
+                  às <strong className="font-mono">{formatHora(selectedTime)}</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-white text-[#0e5a60] font-bold border border-teal-200 text-[11px]">
+                  {vets.find((vet) => String(vet.id) === veterinarioId)?.nomeCompleto ?? `Veterinário #${veterinarioId}`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Motivo da Visita */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-800">
-            Motivo da visita ou sintomas observados <span className="text-slate-400 font-normal">(Opcional)</span>
-          </label>
-          <span className="text-[10px] text-slate-400 font-mono">Máximo 300 caracteres</span>
-        </div>
-        <textarea
-          rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Ex: Thor tem apresentado coceira intensa..."
-          className="w-full p-3 border border-slate-200 rounded-2xl text-xs text-slate-800 focus:ring-2 focus:ring-[#0e5a60]"
-        />
-
-        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-2.5 text-[11px] text-slate-500">
-          <Info className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-          <p>
-            <strong>Orientações de preparo:</strong> Para consultas dermatológicas, pedimos que não aplique pomadas, óleos ou dê banho medicamentoso no pet 48 horas antes da avaliação. Caso haja necessidade de raspado cutâneo ou exame de sangue com jejum, nossa equipe enviará um lembrete.
-          </p>
-        </div>
+      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-2.5 text-[11px] text-slate-500">
+        <Info className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+        <p>
+          O agendamento é criado diretamente na agenda da clínica. Chegue com alguns minutos de
+          antecedência para o check-in na recepção.
+        </p>
       </div>
 
-      {/* Bottom Bar Actions */}
+      {submitError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{submitError}</span>
+        </div>
+      )}
+
       <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
         <button
           onClick={() => onNavigate('tutor-home')}
           className="px-5 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
         >
           <ChevronLeft className="w-4 h-4" />
-          <span>Voltar para Paciente & Serviço</span>
+          <span>Voltar</span>
         </button>
 
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-slate-500 hidden sm:inline">
-            Tudo pronto para revisar seus dados?
-          </span>
-          <button
-            onClick={handleFinishBooking}
-            className="px-6 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-2 group"
-          >
-            <span>Avançar para Revisão & Confirmação</span>
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
-        </div>
+        <button
+          onClick={handleConfirm}
+          disabled={isSubmitting || !animalId || !veterinarioId || !selectedTime}
+          className="px-6 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span>{isSubmitting ? 'Confirmando...' : 'Confirmar Agendamento'}</span>
+          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+        </button>
       </div>
     </div>
   );

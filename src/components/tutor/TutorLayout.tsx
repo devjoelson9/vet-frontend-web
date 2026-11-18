@@ -1,13 +1,15 @@
 import React from 'react';
+import { vetHugDogUrl } from '../../assets/images';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
 import {
   Calendar,
+  CalendarDays,
   Heart,
   FileText,
-  Receipt,
   Home,
   LogOut,
+  UserRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -32,17 +34,22 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
   const navItems = [
     { id: 'tutor-home' as AppScreen, label: 'Início', icon: Home },
     { id: 'tutor-pets' as AppScreen, label: 'Meus Pets', icon: Heart },
+    { id: 'tutor-profile' as AppScreen, label: 'Meu Perfil', icon: UserRound },
     {
       id: 'tutor-booking' as AppScreen,
-      label: 'Consultas & Vacinas',
+      label: 'Agendar Consulta',
       icon: Calendar,
     },
     {
+      id: 'tutor-appointments' as AppScreen,
+      label: 'Minhas Consultas',
+      icon: CalendarDays,
+    },
+    {
       id: 'tutor-records' as AppScreen,
-      label: 'Receitas & Exames',
+      label: 'Prontuário',
       icon: FileText,
     },
-    { id: 'tutor-invoices' as AppScreen, label: 'Faturas', icon: Receipt },
   ];
 
   return (
@@ -95,7 +102,7 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
         <div className="p-3 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+              src={vetHugDogUrl}
               alt={user?.name || 'Mariana Siqueira'}
               className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
               referrerPolicy="no-referrer"
@@ -132,7 +139,7 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
 
           <div className="flex items-center gap-3">
             <img
-              src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+              src={vetHugDogUrl}
               alt={user?.name || 'Mariana Siqueira'}
               className="w-9 h-9 rounded-full object-cover border border-teal-200"
               referrerPolicy="no-referrer"

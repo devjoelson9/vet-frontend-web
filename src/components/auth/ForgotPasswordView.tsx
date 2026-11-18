@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
-import { Mail, Send, ArrowLeft, RotateCw, Check, ShieldCheck, MailCheck } from 'lucide-react';
+import {
+  Mail,
+  Send,
+  ArrowLeft,
+  ShieldCheck,
+  ShieldAlert,
+  MailCheck,
+} from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
+import { authService } from '../../services/authService';
+import { getApiErrorMessage } from '../../services/apiError';
+import { vetHugDogUrl } from '../../assets/images';
 
 interface ForgotPasswordViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -11,14 +21,29 @@ export const ForgotPasswordView: React.FC<ForgotPasswordViewProps> = ({ onNaviga
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      const message = await authService.forgotPassword(email);
+      setSuccessMessage(message);
       setSent(true);
-    }, 600);
+    } catch (err) {
+      console.error('[MaisVet] Falha ao solicitar recuperação de senha:', err);
+      setErrorMessage(
+        getApiErrorMessage(
+          err,
+          'Não foi possível enviar o link de recuperação. Tente novamente.'
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const inputClass =
@@ -29,7 +54,7 @@ export const ForgotPasswordView: React.FC<ForgotPasswordViewProps> = ({ onNaviga
       {/* Left: Brand / Hero */}
       <div className="relative hidden lg:flex lg:w-[40%] xl:w-[42%] flex-col justify-between overflow-hidden">
         <img
-          src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+          src={vetHugDogUrl}
           alt="Veterinária abraçando cão Golden Retriever na clínica"
           className="absolute inset-0 h-full w-full object-cover"
           referrerPolicy="no-referrer"
@@ -91,9 +116,15 @@ export const ForgotPasswordView: React.FC<ForgotPasswordViewProps> = ({ onNaviga
                     Verifique seu e-mail
                   </h3>
                   <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                    Se existir uma conta para{' '}
-                    <span className="font-semibold text-slate-700">{email}</span>, enviamos um
-                    link de redefinição. Confira também a caixa de spam.
+                    {successMessage ||
+                      'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha em poucos minutos.'}
+                  </p>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    E-mail informado:{' '}
+                    <span className="font-semibold text-slate-600">{email}</span>
+                  </p>
+                  <p className="mt-2 text-[10px] text-slate-400">
+                    Confira também a caixa de spam.
                   </p>
 
                   <button
@@ -115,6 +146,17 @@ export const ForgotPasswordView: React.FC<ForgotPasswordViewProps> = ({ onNaviga
               ) : (
                 <>
                   <form onSubmit={handleSubmit} className="space-y-4">
+                    {errorMessage && (
+                      <div
+                        role="alert"
+                        aria-live="assertive"
+                        className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
+                      >
+                        <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                        <span>{errorMessage}</span>
+                      </div>
+                    )}
+
                     <div>
                       <label
                         htmlFor="forgot-email"

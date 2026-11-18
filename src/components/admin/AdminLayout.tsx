@@ -1,11 +1,14 @@
 import React from 'react';
+import { doctorAvatarUrl } from '../../assets/images';
 import {
   LayoutDashboard,
   Users,
   BookOpen,
-  BarChart3,
+  CalendarClock,
+  Pill,
   LogOut,
   ChevronDown,
+  UserRound,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
@@ -81,6 +84,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   <span>Gerenciar usuários internos</span>
                 </button>
                 <button
+                  onClick={() => onNavigate('admin-tutors')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-tutors'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <UserRound className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Gerenciar tutores</span>
+                </button>
+                <button
                   onClick={() => onNavigate('admin-catalog')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                     currentScreen === 'admin-catalog'
@@ -91,21 +105,29 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   <BookOpen className="w-4 h-4 text-[#0e5a60]" />
                   <span>Gerenciar catálogo</span>
                 </button>
+                <button
+                  onClick={() => onNavigate('admin-availability')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-availability'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <CalendarClock className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Disponibilidades</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('admin-medications')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-medications'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <Pill className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Medicamentos</span>
+                </button>
               </div>
-            </div>
-
-            {/* FINANCEIRO */}
-            <div>
-              <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Financeiro
-              </p>
-              <button
-                onClick={() => onNavigate('admin-dashboard')}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-              >
-                <BarChart3 className="w-4 h-4 text-slate-400" />
-                <span>Relatórios & Faturamento</span>
-              </button>
             </div>
           </div>
         </div>
@@ -114,14 +136,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         <div className="p-3 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/src/assets/images/doctor_avatar_1791553366869.jpg"
-              alt="Dr. Carlos Silva"
+              src={doctorAvatarUrl}
+              alt={user?.name || 'Administrador'}
               className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
               referrerPolicy="no-referrer"
             />
             <div className="truncate">
-              <p className="text-xs font-bold text-slate-800 truncate">Dr. Carlos Silva</p>
-              <p className="text-[10px] text-slate-400 truncate">admin@vetcare.com</p>
+              <p className="text-xs font-bold text-slate-800 truncate">
+                {user?.name || 'Administrador'}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {user?.email || 'admin@maisvet.com'}
+              </p>
             </div>
           </div>
           <button
@@ -154,7 +180,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             className="flex items-center gap-3 cursor-pointer p-1.5 rounded-xl hover:bg-slate-50 transition-colors"
           >
             <img
-              src="/src/assets/images/doctor_avatar_1791553366869.jpg"
+              src={doctorAvatarUrl}
               alt={user?.name || 'Carlos Mendes'}
               className="w-9 h-9 rounded-full object-cover border border-teal-200"
               referrerPolicy="no-referrer"

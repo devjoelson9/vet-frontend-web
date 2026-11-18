@@ -11,9 +11,14 @@ import {
   Check,
   Circle,
   ShieldCheck,
+  ShieldAlert,
+  MailCheck,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
+import { authService } from '../../services/authService';
+import { getApiErrorMessage } from '../../services/apiError';
+import { vetHugDogUrl } from '../../assets/images';
 
 interface RegisterViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -33,6 +38,9 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [registered, setRegistered] = useState(false);
 
   const criteria = [
     { key: 'length', label: 'Mínimo de 8 caracteres', met: password.length >= 8 },
@@ -52,9 +60,34 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   const score = password ? criteria.filter((item) => item.met).length : 0;
   const level = score > 0 ? PASSWORD_LEVELS[score - 1] : null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onNavigate('tutor-home');
+    setErrorMessage('');
+
+    if (cpf.replace(/\D/g, '').length !== 11) {
+      setErrorMessage('Informe um CPF com 11 dígitos.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await authService.register({
+        nomeCompleto: name,
+        cpf,
+        email,
+        senha: password,
+        telefone: phone,
+      });
+      setRegistered(true);
+    } catch (err) {
+      console.error('[MaisVet] Falha no cadastro:', err);
+      setErrorMessage(
+        getApiErrorMessage(err, 'Não foi possível concluir o cadastro. Tente novamente.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass =
@@ -65,7 +98,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
       {/* Left: Brand / Hero */}
       <div className="relative hidden lg:flex lg:w-[38%] xl:w-[40%] flex-col justify-between overflow-hidden">
         <img
-          src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
+          src={vetHugDogUrl}
           alt="Veterinária abraçando cão Golden Retriever na clínica"
           className="absolute inset-0 h-full w-full object-cover"
           referrerPolicy="no-referrer"
@@ -128,7 +161,41 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_24px_60px_-24px_rgba(14,90,96,0.35)] sm:p-7">
+              {registered ? (
+                <div className="py-2 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <MailCheck className="h-6 w-6" />
+                  </div>
+                  <h3 className="mt-4 font-serif text-lg font-bold text-[#0e5a60]">
+                    Conta criada com sucesso
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    Cadastro realizado para{' '}
+                    <span className="font-semibold text-slate-700">{email}</span>. Agora é só
+                    entrar com sua senha.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('auth-login')}
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a]"
+                  >
+                    <span>Ir para o login</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-3.5">
+                {errorMessage && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
+                  >
+                    <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
                 <div>
                   <label
                     htmlFor="register-name"
@@ -297,9 +364,10 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
 
                 <button
                   type="submit"
-                  className="group mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a] hover:shadow-[#0e5a60]/30"
+                  disabled={isSubmitting}
+                  className="group mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a] hover:shadow-[#0e5a60]/30 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <span>Criar conta</span>
+                  <span>{isSubmitting ? 'Criando conta...' : 'Criar conta'}</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </button>
 
@@ -314,6 +382,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
                   </button>
                 </p>
               </form>
+              )}
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-slate-400">
