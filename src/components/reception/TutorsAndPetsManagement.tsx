@@ -28,6 +28,7 @@ import { animalService } from '../../services/animalService';
 import { getApiErrorMessage } from '../../services/apiError';
 import { tutorService } from '../../services/tutorService';
 import { mapAnimalToPet, mapTutorToView } from '../../utils/identityMappers';
+import { setReceptionRecordTarget } from '../../utils/receptionRecordTarget';
 
 type DeleteTarget =
   | { kind: 'tutor'; tutorId: number; name: string }
@@ -614,10 +615,16 @@ export const TutorsAndPetsManagement: React.FC<TutorsAndPetsManagementProps> = (
                               Excluir
                             </button>
                             <button
-                              onClick={() => onNavigate('tutor-records')}
+                              onClick={() => {
+                                setReceptionRecordTarget({
+                                  tutorId: Number(tutor.id),
+                                  animalId: Number(pet.id),
+                                });
+                                onNavigate('reception-records');
+                              }}
                               className="text-[11px] font-bold text-slate-500 hover:underline"
                             >
-                              HistÃ³rico â†’
+                              Histórico →
                             </button>
                           </div>
                         </div>
@@ -658,7 +665,10 @@ export const TutorsAndPetsManagement: React.FC<TutorsAndPetsManagementProps> = (
                       <span>Desativar</span>
                     </button>
                     <button
-                      onClick={() => onNavigate('tutor-records')}
+                      onClick={() => {
+                        setReceptionRecordTarget({ tutorId: Number(tutor.id) });
+                        onNavigate('reception-records');
+                      }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-[#0e5a60] hover:bg-teal-100 font-semibold transition-colors"
                     >
                       <FileText className="w-3.5 h-3.5" />

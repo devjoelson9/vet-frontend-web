@@ -6,6 +6,8 @@ import {
   Calendar,
   LogOut,
   CheckCircle2,
+  FileText,
+  Receipt,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
@@ -23,10 +25,21 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
   children,
 }) => {
   const { user, logout } = useAuth();
+  const displayName = user?.name?.trim() || 'Recepcionista';
+  const userEmail = user?.email ?? '';
 
   const handleLogout = () => {
     logout();
     onNavigate('auth-login');
+  };
+
+  const handleQuickCheckIn = () => {
+    onNavigate('reception-dashboard');
+    window.setTimeout(() => {
+      document
+        .getElementById('reception-checkin')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
   };
   return (
     <div className="min-h-screen bg-[#f8fafb] flex">
@@ -81,6 +94,17 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
                   <span>Gerenciar Tutores</span>
                 </button>
                 <button
+                  onClick={() => onNavigate('reception-records')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'reception-records'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Prontuários</span>
+                </button>
+                <button
                   onClick={() => onNavigate('reception-schedule')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                     currentScreen === 'reception-schedule'
@@ -93,6 +117,24 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* FINANCEIRO */}
+            <div>
+              <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Financeiro
+              </p>
+              <button
+                onClick={() => onNavigate('reception-billing')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  currentScreen === 'reception-billing'
+                    ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Receipt className="w-4 h-4 text-[#0e5a60]" />
+                <span>Faturamento</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -101,13 +143,15 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
           <div className="flex items-center gap-2.5 min-w-0">
             <img
               src={doctorAvatarUrl}
-              alt="Dr. Carlos Silva"
+              alt={displayName}
               className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
               referrerPolicy="no-referrer"
             />
             <div className="truncate">
-              <p className="text-xs font-bold text-slate-800 truncate">Dr. Carlos Silva</p>
-              <p className="text-[10px] text-slate-400 truncate">admin@vetcare.com</p>
+              <p className="text-xs font-bold text-slate-800 truncate">{displayName}</p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {userEmail || 'Recepção'}
+              </p>
             </div>
           </div>
           <button
@@ -125,8 +169,9 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
         {/* Top bar with quick Check In */}
         <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex items-center justify-end gap-3 sticky top-0 z-20">
           <button
-            onClick={() => onNavigate('reception-dashboard')}
+            onClick={handleQuickCheckIn}
             className="px-4 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center gap-2"
+            title="Ir para a fila de check-in do dia"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Check In</span>
@@ -142,22 +187,16 @@ export const ReceptionLayout: React.FC<ReceptionLayoutProps> = ({
             <span>Sair</span>
           </button>
 
-          <div
-            onClick={handleLogout}
-            title="Clique para sair"
-            className="flex items-center gap-3 p-1 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
-          >
+          <div className="flex items-center gap-3 p-1 rounded-xl">
             <img
               src={vetHugDogUrl}
-              alt="Dra. Sarah Jenkins"
+              alt={displayName}
               className="w-9 h-9 rounded-full object-cover border border-teal-200"
               referrerPolicy="no-referrer"
             />
             <div className="text-left hidden sm:block leading-tight">
-              <p className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                Dra. Sarah Jenkins <LogOut className="w-3 h-3 text-slate-400 hover:text-red-600" />
-              </p>
-              <p className="text-[10px] text-slate-400 font-medium">Chefe de Recepção & Triagem</p>
+              <p className="text-xs font-bold text-slate-800">{displayName}</p>
+              <p className="text-[10px] text-slate-400 font-medium">Recepção & Triagem</p>
             </div>
           </div>
         </header>

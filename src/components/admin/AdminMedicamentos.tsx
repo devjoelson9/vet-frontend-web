@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 import {
@@ -31,6 +32,7 @@ export const AdminMedicamentos: React.FC = () => {
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [pendingStatusId, setPendingStatusId] = useState<number | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<MedicamentoApi | null>(null);
@@ -171,6 +173,30 @@ export const AdminMedicamentos: React.FC = () => {
       );
     } finally {
       setPendingStatusId(null);
+    }
+  };
+
+  const handleDelete = async (item: MedicamentoApi) => {
+    if (
+      !window.confirm(
+        `Excluir logicamente "${item.nome}"? O medicamento ficará inativo e não poderá mais ser prescrito.`
+      )
+    ) {
+      return;
+    }
+
+    setPendingDeleteId(item.id);
+    setError('');
+
+    try {
+      await clinicoService.excluirMedicamento(item.id);
+      reload();
+    } catch (deleteError) {
+      setError(
+        getApiErrorMessage(deleteError, 'Não foi possível excluir o medicamento.')
+      );
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -333,6 +359,14 @@ export const AdminMedicamentos: React.FC = () => {
                           title="Editar"
                         >
                           <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          disabled={pendingDeleteId === item.id}
+                          title="Excluir medicamento (exclusão lógica)"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleToggleStatus(item)}

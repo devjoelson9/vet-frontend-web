@@ -45,6 +45,8 @@ export interface TutorUpdateRequest {
 
 export interface TutorProfileUpdateRequest {
   nomeCompleto?: string | null;
+  cpf?: string | null;
+  email?: string | null;
   telefone?: string | null;
   endereco?: string | null;
 }
@@ -102,6 +104,8 @@ export interface UsuarioInternoRequest {
 
 export interface UsuarioInternoUpdateRequest {
   nomeCompleto?: string | null;
+  cpf?: string | null;
+  email?: string | null;
   dataNascimento?: string | null;
   telefone?: string | null;
   crmv?: string | null;

@@ -25,6 +25,8 @@ export const AdminEditUserDrawer: React.FC<AdminEditUserDrawerProps> = ({
   onDelete,
 }) => {
   const [name, setName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [phone, setPhone] = useState('');
   const [crmv, setCrmv] = useState('');
@@ -42,6 +44,8 @@ export const AdminEditUserDrawer: React.FC<AdminEditUserDrawerProps> = ({
     if (!user) return;
 
     setName(user.nomeCompleto);
+    setCpf(user.cpf);
+    setEmail(user.email);
     setBirthDate(user.dataNascimento?.slice(0, 10) ?? '');
     setPhone(user.telefone ?? '');
     setCrmv(user.crmv ?? '');
@@ -59,6 +63,17 @@ export const AdminEditUserDrawer: React.FC<AdminEditUserDrawerProps> = ({
       return;
     }
 
+    const cpfDigits = cpf.replace(/\D/g, '');
+    if (cpfDigits.length !== 11) {
+      setValidationError('Informe um CPF com 11 dígitos.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setValidationError('Informe um e-mail válido.');
+      return;
+    }
+
     if (!birthDate) {
       setValidationError('Informe a data de nascimento.');
       return;
@@ -71,6 +86,8 @@ export const AdminEditUserDrawer: React.FC<AdminEditUserDrawerProps> = ({
 
     onSubmit({
       nomeCompleto: name.trim(),
+      cpf: cpfDigits,
+      email: email.trim().toLowerCase(),
       dataNascimento: birthDate,
       telefone: phone.trim() || null,
       crmv: isVet ? crmv.trim() : null,
@@ -159,6 +176,34 @@ export const AdminEditUserDrawer: React.FC<AdminEditUserDrawerProps> = ({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  required
+                  maxLength={150}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  CPF <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formatCpf(cpf)}
+                  onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  required
+                  maxLength={14}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-[#0e5a60]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  E-mail <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   maxLength={150}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"

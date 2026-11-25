@@ -32,23 +32,31 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
   };
 
   const navItems = [
-    { id: 'tutor-home' as AppScreen, label: 'Início', icon: Home },
-    { id: 'tutor-pets' as AppScreen, label: 'Meus Pets', icon: Heart },
-    { id: 'tutor-profile' as AppScreen, label: 'Meu Perfil', icon: UserRound },
+    { id: 'tutor-home' as AppScreen, label: 'Início', icon: Home, testId: 'nav-inicio' },
+    { id: 'tutor-pets' as AppScreen, label: 'Meus Pets', icon: Heart, testId: 'nav-meus-pets' },
+    {
+      id: 'tutor-profile' as AppScreen,
+      label: 'Meu Perfil',
+      icon: UserRound,
+      testId: 'nav-meu-perfil',
+    },
     {
       id: 'tutor-booking' as AppScreen,
       label: 'Agendar Consulta',
       icon: Calendar,
+      testId: 'nav-agendar-consulta',
     },
     {
       id: 'tutor-appointments' as AppScreen,
       label: 'Minhas Consultas',
       icon: CalendarDays,
+      testId: 'nav-minhas-consultas',
     },
     {
       id: 'tutor-records' as AppScreen,
       label: 'Prontuário',
       icon: FileText,
+      testId: 'nav-prontuario',
     },
   ];
 
@@ -78,6 +86,7 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
                     <button
                       key={item.id}
                       onClick={() => onNavigate(item.id)}
+                      data-testid={item.testId}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0e5a60]/40 ${
                         isActive
                           ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
@@ -118,6 +127,7 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
           </div>
           <button
             onClick={handleLogout}
+            data-testid="tutor-sidebar-logout"
             title="Sair da sessão"
             className="p-1.5 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-slate-50"
           >
@@ -147,6 +157,7 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
             <button
               type="button"
               onClick={handleLogout}
+              data-testid="tutor-logout"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
               title="Encerrar sessão"
             >

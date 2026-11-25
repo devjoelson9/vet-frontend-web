@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Mail,
   PawPrint,
   RefreshCw,
@@ -18,7 +19,15 @@ import { formatDateBr, mapAnimalToPet } from '../../utils/identityMappers';
 
 const PAGE_SIZE = 10;
 
-export const VetPatients: React.FC = () => {
+interface VetPatientsProps {
+  areaLabel?: string;
+  onOpenRecords?: (animalId: number) => void;
+}
+
+export const VetPatients: React.FC<VetPatientsProps> = ({
+  areaLabel = 'Atendimento Clínico',
+  onOpenRecords,
+}) => {
   const [animals, setAnimals] = useState<AnimalApi[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -113,7 +122,7 @@ export const VetPatients: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-        <span>Atendimento Clínico</span>
+        <span>{areaLabel}</span>
         <span>›</span>
         <span className="text-slate-800 font-semibold">Pacientes</span>
       </div>
@@ -397,9 +406,21 @@ export const VetPatients: React.FC = () => {
                   </div>
                 )}
 
+                {onOpenRecords && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenRecords(selectedAnimal.id)}
+                    className="w-full px-3 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Ver Histórico Clínico
+                  </button>
+                )}
+
                 <p className="text-[11px] text-slate-400 flex items-center gap-1.5 pt-1">
                   <Mail className="w-3.5 h-3.5" />
-                  Dados de identidade. Prontuário e histórico clínico pertencem ao serviço clínico.
+                  Dados de identidade. O histórico clínico está disponível no módulo de
+                  prontuários.
                 </p>
               </div>
             )}

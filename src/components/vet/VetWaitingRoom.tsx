@@ -15,8 +15,9 @@ import { AppScreen } from '../../types';
 import type { AnimalApi } from '../../types/api';
 import { useAuth } from '../../context/AuthContext';
 import { animalService } from '../../services/animalService';
-import { clinicoService } from '../../services/clinicoService';
+import { clinicoService, type AtendimentoApi } from '../../services/clinicoService';
 import { getApiErrorMessage } from '../../services/apiError';
+import { setClinicalExamTarget } from '../../utils/clinicalExamTarget';
 import {
   agendamentoService,
   formatHora,
@@ -50,11 +51,14 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
   const { user } = useAuth();
   const [queue, setQueue] = useState<AgendamentoApi[]>([]);
   const [agenda, setAgenda] = useState<AgendamentoApi[]>([]);
+  const [attendances, setAttendances] = useState<AtendimentoApi[]>([]);
   const [animals, setAnimals] = useState<Record<number, AnimalApi | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [feedback, setFeedback] = useState('');
   const [pendingStartId, setPendingStartId] = useState<number | null>(null);
+  const [pendingConcludeId, setPendingConcludeId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const userVetId = Number(user?.veterinarioId ?? user?.id);
@@ -79,12 +83,18 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
       const today = toIsoDate(new Date());
 
       try {
-        const [queueResult, agendaResult] = await Promise.all([
+        const [queueResult, agendaResult, attendancesResult] = await Promise.all([
           agendamentoService.listarFilaEspera({ veterinarioId: vetId, data: today }),
           agendamentoService.listar({
             inicio: today,
             fim: today,
             veterinarioId: vetId,
+          }),
+          clinicoService.listarAtendimentos({
+            inicio: today,
+            fim: today,
+            veterinarioId: vetId,
+            size: 100,
           }),
         ]);
 
@@ -92,6 +102,7 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
 
         setQueue(queueResult);
         setAgenda(agendaResult);
+        setAttendances(attendancesResult.content);
 
         const animalsMap: Record<number, AnimalApi | null> = {};
         await Promise.all(
@@ -109,6 +120,7 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
 
         setQueue([]);
         setAgenda([]);
+        setAttendances([]);
         setAnimals({});
         setError(
           getApiErrorMessage(loadError, 'Não foi possível carregar a fila de espera do dia.')
@@ -147,15 +159,57 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
     }
   };
 
-  const current = queue[0];
+  const handleOpenAttendance = (atendimento: AtendimentoApi) => {
+    setClinicalExamTarget(atendimento.id);
+    onNavigate('vet-exam');
+  };
+
+  const handleConcludeAppointment = async (item: AgendamentoApi) => {
+    if (
+      !window.confirm(
+        'Concluir manualmente este agendamento? Use esta ação somente após o atendimento realizado.'
+      )
+    ) {
+      return;
+    }
+
+    setPendingConcludeId(item.id);
+    setActionError('');
+    setFeedback('');
+
+    try {
+      await agendamentoService.alterarStatus(item.id, 'CONCLUIDO');
+      setFeedback(`Agendamento #${String(item.id).padStart(4, '0')} concluído manualmente.`);
+      setReloadKey((value) => value + 1);
+    } catch (concludeError) {
+      setActionError(
+        getApiErrorMessage(concludeError, 'Não foi possível concluir o agendamento.')
+      );
+    } finally {
+      setPendingConcludeId(null);
+    }
+  };
+
+  const attendanceByAppointment = new Map<number, AtendimentoApi>();
+  attendances.forEach((atendimento) => {
+    if (atendimento.agendamentoId != null) {
+      attendanceByAppointment.set(atendimento.agendamentoId, atendimento);
+    }
+  });
+
+  const waitingQueue = queue.filter((item) => !attendanceByAppointment.has(item.id));
+  const current = waitingQueue[0];
   const currentAnimal = current ? animals[current.animalId] : null;
   const currentWaiting = current ? waitingMinutes(current.horarioCheckin) : null;
-  const nextInQueue = queue.slice(1, 4);
+  const nextInQueue = waitingQueue.slice(1, 4);
   const completedToday = agenda.filter(
     (item) => item.status === 'ATENDIMENTO_REALIZADO' || item.status === 'CONCLUIDO'
   ).length;
   const checkInsToday = agenda.filter((item) => item.horarioCheckin).length;
   const scheduledToday = agenda.filter((item) => item.status === 'AGENDADO').length;
+  const inProgressToday = attendances.filter(
+    (atendimento) => atendimento.status === 'EM_ANDAMENTO'
+  ).length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -217,6 +271,13 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
         </div>
       )}
 
+      {feedback && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{feedback}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs">
           <div className="flex items-center justify-between">
@@ -228,7 +289,9 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold text-slate-900 font-mono">{queue.length}</span>
+            <span className="text-2xl font-bold text-slate-900 font-mono">
+              {waitingQueue.length}
+            </span>
             <span className="text-xs text-slate-500">pacientes aguardando</span>
           </div>
         </div>
@@ -286,7 +349,8 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
               Fila de Espera de Pacientes do Dia
             </h2>
             <span className="text-xs text-slate-400 font-medium">
-              {queue.length} paciente(s) aguardando
+              {waitingQueue.length} paciente(s) aguardando
+              {inProgressToday > 0 ? ` • ${inProgressToday} em atendimento` : ''}
             </span>
           </div>
 
@@ -494,26 +558,41 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
               .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
               .map((item) => {
                 const animal = animals[item.animalId];
-                const isWaiting = item.status === 'AGUARDANDO_ATENDIMENTO';
+                const atendimento = attendanceByAppointment.get(item.id);
+                const emAtendimento = atendimento?.status === 'EM_ANDAMENTO';
+                const isWaiting =
+                  item.status === 'AGUARDANDO_ATENDIMENTO' && !emAtendimento;
 
                 return (
                   <div
                     key={item.id}
                     className={`relative pl-5 border-l-2 ${
-                      isWaiting ? 'border-[#0e5a60] bg-teal-50/50 p-2.5 rounded-r-xl' : 'border-slate-200'
+                      emAtendimento
+                        ? 'border-amber-400 bg-amber-50/60 p-2.5 rounded-r-xl'
+                        : isWaiting
+                          ? 'border-[#0e5a60] bg-teal-50/50 p-2.5 rounded-r-xl'
+                          : 'border-slate-200'
                     }`}
                   >
                     <span
                       className={`w-2.5 h-2.5 rounded-full absolute -left-[6px] top-1 ${
-                        isWaiting ? 'bg-[#0e5a60]' : 'bg-slate-300'
+                        emAtendimento
+                          ? 'bg-amber-500'
+                          : isWaiting
+                            ? 'bg-[#0e5a60]'
+                            : 'bg-slate-300'
                       }`}
                     />
-                    <div className="flex justify-between items-baseline">
+                    <div className="flex justify-between items-baseline gap-2">
                       <span className="font-mono font-bold text-slate-700">
                         {formatHora(item.horaInicio)}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-semibold">
-                        {item.status}
+                      <span
+                        className={`text-[10px] font-semibold ${
+                          emAtendimento ? 'text-amber-700' : 'text-slate-500'
+                        }`}
+                      >
+                        {emAtendimento ? 'Em atendimento' : item.status}
                       </span>
                     </div>
                     <p className="font-bold text-slate-800 mt-0.5">
@@ -523,6 +602,27 @@ export const VetWaitingRoom: React.FC<VetWaitingRoomProps> = ({ onNavigate }) =>
                       {animal?.tutorNome ?? `Tutor #${item.tutorId ?? '—'}`} • Veterinário #
                       {item.veterinarioId}
                     </p>
+
+                    {emAtendimento && atendimento && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAttendance(atendimento)}
+                        className="mt-2 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold rounded-lg"
+                      >
+                        Abrir atendimento
+                      </button>
+                    )}
+
+                    {item.status === 'ATENDIMENTO_REALIZADO' && (
+                      <button
+                        type="button"
+                        onClick={() => handleConcludeAppointment(item)}
+                        disabled={pendingConcludeId === item.id}
+                        className="mt-2 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-lg disabled:opacity-60"
+                      >
+                        {pendingConcludeId === item.id ? 'Concluindo...' : 'Concluir agendamento'}
+                      </button>
+                    )}
                   </div>
                 );
               })}

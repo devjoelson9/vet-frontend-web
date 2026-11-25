@@ -142,6 +142,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
                 <div
                   role="alert"
                   aria-live="assertive"
+                  data-testid="login-error"
                   className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
                 >
                   <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -149,7 +150,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
                 <div>
                   <label
                     htmlFor="login-email"
@@ -161,6 +162,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
                     <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       id="login-email"
+                      data-testid="login-email-input"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -192,6 +194,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
                     <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       id="login-password"
+                      data-testid="login-password-input"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -203,6 +206,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
+                      data-testid="login-toggle-password"
                       aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:text-slate-600"
                     >
@@ -217,6 +221,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onNavigate }) => {
 
                 <button
                   type="submit"
+                  data-testid="login-submit"
                   disabled={isLoading}
                   className="group flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a] hover:shadow-[#0e5a60]/30 disabled:cursor-not-allowed disabled:opacity-70"
                 >

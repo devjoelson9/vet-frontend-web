@@ -6,6 +6,10 @@ import {
   BookOpen,
   CalendarClock,
   Pill,
+  Stethoscope,
+  FileText,
+  Receipt,
+  PawPrint,
   LogOut,
   ChevronDown,
   UserRound,
@@ -64,6 +68,59 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 <LayoutDashboard className="w-4 h-4 text-[#0e5a60]" />
                 <span>Dashboard</span>
               </button>
+            </div>
+
+            {/* OPERAÇÃO CLÍNICA */}
+            <div>
+              <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Operação Clínica
+              </p>
+              <div className="space-y-1">
+                <button
+                  onClick={() => onNavigate('admin-clinical')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-clinical' || currentScreen === 'admin-exam'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <Stethoscope className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Fila e atendimentos</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('admin-records')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-records'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Prontuários</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('admin-patients')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-patients'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <PawPrint className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Pacientes</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('admin-billing')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    currentScreen === 'admin-billing'
+                      ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <Receipt className="w-4 h-4 text-[#0e5a60]" />
+                  <span>Faturamento</span>
+                </button>
+              </div>
             </div>
 
             {/* GESTÃO & CADASTROS */}

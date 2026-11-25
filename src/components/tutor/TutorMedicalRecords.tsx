@@ -60,6 +60,9 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
   const [pets, setPets] = useState<AnimalApi[]>([]);
   const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoricoClinicoApi[]>([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyTotalElements, setHistoryTotalElements] = useState(0);
   const [isLoadingPets, setIsLoadingPets] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState('');
@@ -103,10 +106,16 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
   }, [reloadKey]);
 
   useEffect(() => {
+    setHistoryPage(0);
+  }, [selectedPetId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     if (!selectedPetId) {
       setHistory([]);
+      setHistoryTotalPages(0);
+      setHistoryTotalElements(0);
       return;
     }
 
@@ -118,9 +127,14 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
 
       try {
         const result = await clinicoService.consultarMeuHistorico(selectedPetId as number, {
-          size: 50,
+          page: historyPage,
+          size: 20,
         });
-        if (!cancelled) setHistory(result.content);
+        if (!cancelled) {
+          setHistory(result.content);
+          setHistoryTotalPages(result.totalPages);
+          setHistoryTotalElements(result.totalElements);
+        }
       } catch (loadError) {
         if (!cancelled) {
           setHistory([]);
@@ -138,7 +152,7 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
     return () => {
       cancelled = true;
     };
-  }, [selectedPetId, reloadKey]);
+  }, [selectedPetId, reloadKey, historyPage]);
 
   const selectedPet = pets.find((pet) => pet.id === selectedPetId) ?? null;
 
@@ -245,7 +259,10 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
         {pets.map((pet) => (
           <button
             key={pet.id}
-            onClick={() => setSelectedPetId(pet.id)}
+            onClick={() => {
+              setHistoryPage(0);
+              setSelectedPetId(pet.id);
+            }}
             className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
               selectedPetId === pet.id
                 ? 'bg-[#0e5a60] text-white shadow-2xs'
@@ -493,6 +510,35 @@ export const TutorMedicalRecords: React.FC<TutorMedicalRecordsProps> = ({ onNavi
             );
           })}
       </div>
+
+      {!isLoadingHistory && historyTotalPages > 1 && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500">
+            Página {historyPage + 1} de {historyTotalPages} • {historyTotalElements}{' '}
+            {historyTotalElements === 1 ? 'atendimento' : 'atendimentos'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHistoryPage((page) => Math.max(0, page - 1))}
+              disabled={historyPage === 0}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setHistoryPage((page) => Math.min(historyTotalPages - 1, page + 1))
+              }
+              disabled={historyPage >= historyTotalPages - 1}
+              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Próxima
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

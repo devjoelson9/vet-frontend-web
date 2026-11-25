@@ -22,6 +22,7 @@ import { AdminTutors } from './components/admin/AdminTutors';
 import { AdminCatalog } from './components/admin/AdminCatalog';
 import { AdminDisponibilidades } from './components/admin/AdminDisponibilidades';
 import { AdminMedicamentos } from './components/admin/AdminMedicamentos';
+import { AdminClinical } from './components/admin/AdminClinical';
 
 // Reception screens
 import { ReceptionLayout } from './components/reception/ReceptionLayout';
@@ -29,12 +30,16 @@ import { ReceptionDashboard } from './components/reception/ReceptionDashboard';
 import { TutorsAndPetsManagement } from './components/reception/TutorsAndPetsManagement';
 import { NewTutorAndPet } from './components/reception/NewTutorAndPet';
 import { ClinicSchedule } from './components/reception/ClinicSchedule';
+import { ReceptionBilling } from './components/reception/ReceptionBilling';
+import { ReceptionMedicalRecords } from './components/reception/ReceptionMedicalRecords';
 
 // Vet screens
 import { VetLayout } from './components/vet/VetLayout';
 import { VetWaitingRoom } from './components/vet/VetWaitingRoom';
 import { VetClinicalExam } from './components/vet/VetClinicalExam';
 import { VetPatients } from './components/vet/VetPatients';
+import { VetMedicalRecords } from './components/vet/VetMedicalRecords';
+import { setVetRecordTarget } from './utils/vetRecordTarget';
 
 // Tutor screens
 import { TutorLayout } from './components/tutor/TutorLayout';
@@ -120,6 +125,25 @@ function AppContent() {
         {currentScreen === 'admin-catalog' && <AdminCatalog />}
         {currentScreen === 'admin-availability' && <AdminDisponibilidades />}
         {currentScreen === 'admin-medications' && <AdminMedicamentos />}
+        {currentScreen === 'admin-clinical' && (
+          <AdminClinical onNavigate={setCurrentScreen} />
+        )}
+        {currentScreen === 'admin-exam' && (
+          <VetClinicalExam onNavigate={setCurrentScreen} variant="admin" />
+        )}
+        {currentScreen === 'admin-records' && (
+          <ReceptionMedicalRecords areaLabel="Painel Administrativo" />
+        )}
+        {currentScreen === 'admin-billing' && (
+          <ReceptionBilling
+            onNavigate={setCurrentScreen}
+            recordsScreen="admin-records"
+            areaLabel="Painel Administrativo"
+          />
+        )}
+        {currentScreen === 'admin-patients' && (
+          <VetPatients areaLabel="Painel Administrativo" />
+        )}
         {/* Fallback de telas admin */}
         {![
           'admin-dashboard',
@@ -129,6 +153,11 @@ function AppContent() {
           'admin-catalog',
           'admin-availability',
           'admin-medications',
+          'admin-clinical',
+          'admin-exam',
+          'admin-records',
+          'admin-billing',
+          'admin-patients',
         ].includes(currentScreen) && <AdminDashboard />}
       </AdminLayout>
     );
@@ -148,12 +177,16 @@ function AppContent() {
           <NewTutorAndPet onNavigate={setCurrentScreen} />
         )}
         {currentScreen === 'reception-schedule' && <ClinicSchedule />}
+        {currentScreen === 'reception-billing' && <ReceptionBilling onNavigate={setCurrentScreen} />}
+        {currentScreen === 'reception-records' && <ReceptionMedicalRecords />}
         {/* Fallback de telas recepção */}
         {![
           'reception-dashboard',
           'reception-tutors',
           'reception-new-tutor',
           'reception-schedule',
+          'reception-billing',
+          'reception-records',
         ].includes(currentScreen) && <ReceptionDashboard onNavigate={setCurrentScreen} />}
       </ReceptionLayout>
     );
@@ -165,9 +198,17 @@ function AppContent() {
       <VetLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
         {currentScreen === 'vet-queue' && <VetWaitingRoom onNavigate={setCurrentScreen} />}
         {currentScreen === 'vet-exam' && <VetClinicalExam onNavigate={setCurrentScreen} />}
-        {currentScreen === 'vet-patients' && <VetPatients />}
+        {currentScreen === 'vet-patients' && (
+          <VetPatients
+            onOpenRecords={(animalId) => {
+              setVetRecordTarget(animalId);
+              setCurrentScreen('vet-records');
+            }}
+          />
+        )}
+        {currentScreen === 'vet-records' && <VetMedicalRecords />}
         {/* Fallback */}
-        {!['vet-queue', 'vet-exam', 'vet-patients'].includes(currentScreen) && (
+        {!['vet-queue', 'vet-exam', 'vet-patients', 'vet-records'].includes(currentScreen) && (
           <VetWaitingRoom onNavigate={setCurrentScreen} />
         )}
       </VetLayout>
@@ -180,7 +221,9 @@ function AppContent() {
       <TutorLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
         {currentScreen === 'tutor-home' && <TutorHome onNavigate={setCurrentScreen} />}
         {currentScreen === 'tutor-pets' && <TutorMyPets onNavigate={setCurrentScreen} />}
-        {currentScreen === 'tutor-profile' && <TutorProfile />}
+        {currentScreen === 'tutor-profile' && (
+          <TutorProfile onNavigate={setCurrentScreen} />
+        )}
         {currentScreen === 'tutor-booking' && <TutorBookingFlow onNavigate={setCurrentScreen} />}
         {currentScreen === 'tutor-appointments' && (
           <TutorAppointments onNavigate={setCurrentScreen} />

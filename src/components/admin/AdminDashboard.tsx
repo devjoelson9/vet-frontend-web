@@ -333,9 +333,8 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
-        <strong className="text-slate-700">Faturamento:</strong> os indicadores financeiros serão
-        exibidos quando o serviço de faturamento estiver habilitado. Nenhum valor é estimado nesta
-        tela.
+        <strong className="text-slate-700">Operação clínica:</strong> fila, atendimentos,
+        prontuários e faturamento estão disponíveis no menu lateral do Painel Administrativo.
       </div>
     </div>
   );

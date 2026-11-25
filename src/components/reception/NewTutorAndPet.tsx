@@ -34,6 +34,7 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
   const [cityState, setCityState] = useState('');
 
   // Pet fields
+  const [includePet, setIncludePet] = useState(true);
   const [petName, setPetName] = useState('');
   const [species, setSpecies] = useState<'Cão' | 'Gato' | 'Ave' | 'Outro'>('Cão');
   const [breed, setBreed] = useState('');
@@ -45,6 +46,7 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
   const [error, setError] = useState('');
   const [createdTutor, setCreatedTutor] = useState<TutorApi | null>(null);
   const [petLinked, setPetLinked] = useState(false);
+  const [petSkipped, setPetSkipped] = useState(false);
 
   const resetForm = () => {
     setTutorName('');
@@ -57,6 +59,7 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
     setNumber('');
     setNeighborhood('');
     setCityState('');
+    setIncludePet(true);
     setPetName('');
     setSpecies('Cão');
     setBreed('');
@@ -66,6 +69,7 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
     setError('');
     setCreatedTutor(null);
     setPetLinked(false);
+    setPetSkipped(false);
   };
 
   const buildAddress = (): string | null => {
@@ -99,6 +103,11 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
       return;
     }
 
+    if (includePet && !petName.trim()) {
+      setError('Informe o nome do pet ou desmarque "Cadastrar animal agora".');
+      return;
+    }
+
     const parsedWeight = Number.parseFloat(weight.replace(',', '.'));
     setIsSaving(true);
 
@@ -113,6 +122,11 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
       });
 
       setCreatedTutor(tutor);
+
+      if (!includePet) {
+        setPetSkipped(true);
+        return;
+      }
 
       try {
         await animalService.createForTutor(tutor.id, {
@@ -164,8 +178,8 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
             Cadastro de Tutor & Animal
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-            Cadastre o responsável e vincule o animal em uma única etapa. Os dados são gravados
-            diretamente no serviço de identidade.
+            Cadastre o responsável e, se desejar, vincule um animal no mesmo formulário. Os dados
+            são gravados diretamente no serviço de identidade.
           </p>
         </div>
 
@@ -191,7 +205,11 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
               <span className="font-semibold text-slate-700">{createdTutor.nomeCompleto}</span> foi
               cadastrado com sucesso.
             </p>
-            {petLinked ? (
+            {petSkipped ? (
+              <p className="text-xs text-slate-500 mt-1">
+                Nenhum animal foi vinculado. Você pode adicionar um pet pela tela de tutores.
+              </p>
+            ) : petLinked ? (
               <p className="text-xs text-emerald-700 mt-1">
                 Animal vinculado ao tutor e disponível na listagem.
               </p>
@@ -433,11 +451,29 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
                   </div>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-teal-50 text-[#0e5a60] text-[10px] font-bold">
-                  1 animal
+                  {includePet ? '1 animal' : 'Opcional'}
                 </span>
               </div>
 
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-teal-50/60 border border-teal-100 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includePet}
+                  onChange={(event) => setIncludePet(event.target.checked)}
+                  className="mt-0.5 text-[#0e5a60] focus:ring-[#0e5a60]"
+                />
+                <span>
+                  <span className="block text-xs font-bold text-slate-800">
+                    Cadastrar animal agora
+                  </span>
+                  <span className="block text-[10px] text-slate-500 mt-0.5">
+                    Desmarque para cadastrar apenas o tutor e vincular o animal depois.
+                  </span>
+                </span>
+              </label>
+
               {/* Pet Form */}
+              {includePet && (
               <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -447,7 +483,6 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
                     type="text"
                     value={petName}
                     onChange={(e) => setPetName(e.target.value)}
-                    required
                     maxLength={100}
                     placeholder="Nome do animal"
                     className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
@@ -554,6 +589,14 @@ export const NewTutorAndPet: React.FC<NewTutorAndPetProps> = ({ onNavigate }) =>
                   </div>
                 </div>
               </div>
+              )}
+
+              {!includePet && (
+                <div className="p-4 rounded-2xl bg-slate-50/70 border border-dashed border-slate-300 text-[11px] text-slate-500">
+                  O tutor será cadastrado sem animal. Use "Vincular Outro Animal" na tela de
+                  tutores para adicionar o pet depois.
+                </div>
+              )}
 
               <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-3 text-[11px] text-slate-500">
                 Vacinas, prontuário e demais dados clínicos pertencem ao serviço clínico e não são

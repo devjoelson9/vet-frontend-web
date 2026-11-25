@@ -198,15 +198,18 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
 
   if (isSuccess) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6" data-testid="booking-success">
         <div className="bg-white rounded-3xl border border-emerald-200 shadow-2xs p-10 text-center">
           <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-7 h-7" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 font-serif mt-4">
+          <h1
+            className="text-xl font-bold text-slate-900 font-serif mt-4"
+            data-testid="booking-success-title"
+          >
             Agendamento confirmado
           </h1>
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-slate-500 mt-2" data-testid="booking-success-details">
             {selectedPet?.nome ?? 'Seu pet'} foi agendado para{' '}
             <strong className="text-slate-800 capitalize">{formatLongDate(selectedDate)}</strong>{' '}
             às <strong className="text-slate-800 font-mono">{formatHora(selectedTime)}</strong>{' '}
@@ -219,6 +222,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
             <button
               onClick={() => onNavigate('tutor-home')}
+              data-testid="booking-success-home"
               className="px-5 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs"
             >
               Voltar ao início
@@ -228,6 +232,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                 setIsSuccess(false);
                 setSelectedTime('');
           }}
+              data-testid="booking-new"
               className="px-5 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl"
             >
               Fazer outro agendamento
@@ -298,7 +303,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
       </div>
 
       {petsError && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2" data-testid="booking-pets-error">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{petsError}</span>
         </div>
@@ -328,6 +333,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
           <>
             <select
               value={animalId}
+              data-testid="booking-pet-select"
               onChange={(event) => setAnimalId(event.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
             >
@@ -340,7 +346,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
             </select>
 
             {petView && (
-              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-teal-50/60 border border-teal-200/70">
+              <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-teal-50/60 border border-teal-200/70" data-testid="booking-pet-preview">
                 <div className="w-10 h-10 rounded-xl bg-teal-100 text-[#0e5a60] flex items-center justify-center shrink-0">
                   <PawPrint className="w-5 h-5" />
                 </div>
@@ -372,6 +378,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
           </label>
           <select
             value={veterinarioId}
+            data-testid="booking-vet-select"
             onChange={(event) => setVeterinarioId(event.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
           >
@@ -406,7 +413,10 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className="md:col-span-5 border border-slate-200/80 rounded-2xl p-4">
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
-              <span className="font-bold text-slate-800 text-xs capitalize">
+              <span
+                className="font-bold text-slate-800 text-xs capitalize"
+                data-testid="booking-month-label"
+              >
                 {monthCursor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
               </span>
               <div className="flex items-center gap-1">
@@ -416,6 +426,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                       new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1)
                     )
                   }
+                  data-testid="booking-prev-month"
                   className="p-1 hover:bg-slate-100 rounded text-slate-400"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -426,6 +437,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                       new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1)
                     )
                   }
+                  data-testid="booking-next-month"
                   className="p-1 hover:bg-slate-100 rounded text-slate-400"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -457,6 +469,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                   <button
                     key={isoDate}
                     type="button"
+                    data-testid={`booking-day-${isoDate}`}
                     disabled={isPast}
                     onClick={() => setSelectedDate(isoDate)}
                     className={`py-1 rounded-lg font-mono transition-all ${
@@ -486,17 +499,19 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
             )}
 
             {isLoadingSlots && (
-              <p className="text-xs text-slate-500">Consultando horários disponíveis...</p>
+              <p className="text-xs text-slate-500" data-testid="booking-slots-loading">
+                Consultando horários disponíveis...
+              </p>
             )}
 
             {slotError && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-800">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-800" data-testid="booking-slot-error">
                 {slotError}
               </div>
             )}
 
             {!isLoadingSlots && !slotError && veterinarioId && slots.length === 0 && (
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500" data-testid="booking-no-slots">
                 Nenhum horário disponível para esta data. Tente outro dia ou outro veterinário.
               </div>
             )}
@@ -511,6 +526,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                     <button
                       key={slot.horaInicio}
                       type="button"
+                      data-testid={`booking-slot-${slot.horaInicio.slice(0, 5).replace(':', '-')}`}
                       onClick={() => setSelectedTime(slot.horaInicio)}
                       className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
                         selectedTime === slot.horaInicio
@@ -535,6 +551,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
                     <button
                       key={slot.horaInicio}
                       type="button"
+                      data-testid={`booking-slot-${slot.horaInicio.slice(0, 5).replace(':', '-')}`}
                       onClick={() => setSelectedTime(slot.horaInicio)}
                       className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition-all ${
                         selectedTime === slot.horaInicio
@@ -550,7 +567,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
             )}
 
             {selectedTime && (
-              <div className="p-3.5 rounded-2xl bg-teal-50 border border-teal-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="p-3.5 rounded-2xl bg-teal-50 border border-teal-200/80 flex flex-wrap items-center justify-between gap-2 text-xs" data-testid="booking-selected-summary">
                 <span className="text-slate-700">
                   Horário selecionado:{' '}
                   <strong className="text-slate-900 capitalize">
@@ -576,7 +593,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
       </div>
 
       {submitError && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 flex items-start gap-2" data-testid="booking-submit-error">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{submitError}</span>
         </div>
@@ -585,6 +602,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
       <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
         <button
           onClick={() => onNavigate('tutor-home')}
+          data-testid="booking-back"
           className="px-5 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
         >
           <ChevronLeft className="w-4 h-4" />
@@ -593,6 +611,7 @@ export const TutorBookingFlow: React.FC<TutorBookingFlowProps> = ({ onNavigate }
 
         <button
           onClick={handleConfirm}
+          data-testid="booking-confirm"
           disabled={isSubmitting || !animalId || !veterinarioId || !selectedTime}
           className="px-6 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
         >

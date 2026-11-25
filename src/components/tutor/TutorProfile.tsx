@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  CreditCard,
   Mail,
   MapPin,
   Phone,
@@ -10,15 +11,22 @@ import {
   UserRound,
 } from 'lucide-react';
 import type { TutorApi } from '../../types/api';
+import type { AppScreen } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { getApiErrorMessage } from '../../services/apiError';
 import { tutorService } from '../../services/tutorService';
 import { formatCpf } from '../../utils/identityMappers';
 
-export const TutorProfile: React.FC = () => {
-  const { updateUser } = useAuth();
+interface TutorProfileProps {
+  onNavigate: (screen: AppScreen) => void;
+}
+
+export const TutorProfile: React.FC<TutorProfileProps> = ({ onNavigate }) => {
+  const { updateUser, logout } = useAuth();
   const [profile, setProfile] = useState<TutorApi | null>(null);
   const [name, setName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +42,8 @@ export const TutorProfile: React.FC = () => {
       const result = await tutorService.getMe();
       setProfile(result);
       setName(result.nomeCompleto);
+      setCpf(formatCpf(result.cpf));
+      setEmail(result.email);
       setPhone(result.telefone ?? '');
       setAddress(result.endereco ?? '');
     } catch (loadError) {
@@ -57,19 +67,46 @@ export const TutorProfile: React.FC = () => {
       return;
     }
 
+    if (cpf.replace(/\D/g, '').length !== 11) {
+      setError('Informe um CPF com 11 dígitos.');
+      return;
+    }
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Informe um e-mail válido.');
+      return;
+    }
+
+    const emailChanged =
+      profile != null && email.trim().toLowerCase() !== profile.email.trim().toLowerCase();
+
     setIsSaving(true);
 
     try {
       const updated = await tutorService.updateMe({
         nomeCompleto: name.trim(),
+        cpf: cpf.replace(/\D/g, ''),
+        email: email.trim().toLowerCase(),
         telefone: phone.trim() || null,
         endereco: address.trim() || null,
       });
 
       setProfile(updated);
       setName(updated.nomeCompleto);
+      setCpf(formatCpf(updated.cpf));
+      setEmail(updated.email);
       setPhone(updated.telefone ?? '');
       setAddress(updated.endereco ?? '');
+
+      if (emailChanged) {
+        window.alert(
+          'E-mail atualizado com sucesso. Entre novamente usando o novo e-mail.'
+        );
+        logout();
+        onNavigate('auth-login');
+        return;
+      }
+
       updateUser({
         name: updated.nomeCompleto,
         email: updated.email,
@@ -176,6 +213,42 @@ export const TutorProfile: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  CPF <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <CreditCard className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    required
+                    maxLength={14}
+                    inputMode="numeric"
+                    className="w-full pl-9 pr-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0e5a60]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  E-mail <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    maxLength={150}
+                    autoComplete="email"
+                    className="w-full pl-9 pr-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0e5a60]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Telefone
                 </label>
                 <div className="relative">
@@ -209,8 +282,8 @@ export const TutorProfile: React.FC = () => {
               </div>
 
               <p className="text-[11px] text-slate-400">
-                E-mail, CPF e status do cadastro são gerenciados pela recepção e não podem ser
-                alterados por aqui.
+                O status do cadastro é gerenciado pela recepção. Ao alterar o e-mail, será
+                necessário entrar novamente com o novo endereço.
               </p>
 
               <div className="pt-2 flex justify-end">

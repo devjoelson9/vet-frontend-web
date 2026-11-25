@@ -13,6 +13,7 @@ import {
   Save,
   Stethoscope,
   Trash2,
+  X,
 } from 'lucide-react';
 import { AppScreen } from '../../types';
 import type { AnimalApi } from '../../types/api';
@@ -29,9 +30,14 @@ import {
   type ValorAtendimentoApi,
 } from '../../services/clinicoService';
 import { mapAnimalToPet } from '../../utils/identityMappers';
+import {
+  clearClinicalExamTarget,
+  peekClinicalExamTarget,
+} from '../../utils/clinicalExamTarget';
 
 interface VetClinicalExamProps {
   onNavigate: (screen: AppScreen) => void;
+  variant?: 'vet' | 'admin';
 }
 
 function formatCurrency(value: number | null | undefined): string {
@@ -82,9 +88,15 @@ const emptyPrescricaoForm = {
   orientacoesGerais: '',
 };
 
-export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) => {
+export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({
+  onNavigate,
+  variant = 'vet',
+}) => {
+  const isAdmin = variant === 'admin';
   const [atendimentos, setAtendimentos] = useState<AtendimentoApi[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() =>
+    peekClinicalExamTarget()
+  );
   const [atendimento, setAtendimento] = useState<AtendimentoApi | null>(null);
   const [animal, setAnimal] = useState<AnimalApi | null>(null);
   const [itens, setItens] = useState<ItemAtendimentoApi[]>([]);
@@ -108,7 +120,12 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
   const [prescricaoForm, setPrescricaoForm] = useState(emptyPrescricaoForm);
   const [itemOrigem, setItemOrigem] = useState('');
   const [itemQuantidade, setItemQuantidade] = useState('1');
+  const [servicoBaseId, setServicoBaseId] = useState('');
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    clearClinicalExamTarget();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -343,6 +360,64 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
     }
   };
 
+  const handleCancelAttendance = async () => {
+    if (!atendimento) return;
+
+    if (
+      !window.confirm(
+        'Cancelar este atendimento em andamento? O agendamento voltará a ficar Aguardando Atendimento.'
+      )
+    ) {
+      return;
+    }
+
+    setPendingAction('cancel');
+    setActionError('');
+    setFeedback('');
+
+    try {
+      await clinicoService.cancelarAtendimento(atendimento.id);
+      setAtendimentos((current) => current.filter((item) => item.id !== atendimento.id));
+      setAtendimento(null);
+      setSelectedId(null);
+      setFeedback('Atendimento cancelado. O agendamento permanece aguardando atendimento.');
+      setListReloadKey((value) => value + 1);
+    } catch (cancelError) {
+      setActionError(
+        getApiErrorMessage(cancelError, 'Não foi possível cancelar o atendimento clínico.')
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleDefinirValorBase = async () => {
+    if (!atendimento || !servicoBaseId) {
+      setActionError('Selecione um serviço ativo para redefinir o valor base.');
+      return;
+    }
+
+    setPendingAction('valorBase');
+    setActionError('');
+    setFeedback('');
+
+    try {
+      const updated = await clinicoService.definirValorBase(
+        atendimento.id,
+        Number(servicoBaseId)
+      );
+      setValor(updated);
+      setServicoBaseId('');
+      setFeedback('Valor base do atendimento redefinido.');
+    } catch (baseError) {
+      setActionError(
+        getApiErrorMessage(baseError, 'Não foi possível redefinir o valor base do atendimento.')
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   const handleAddItem = async () => {
     if (!atendimento || !itemOrigem) return;
 
@@ -522,7 +597,7 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
       <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
         <span>Módulo Clínico</span>
         <span>›</span>
-        <span>Painel do Médico Veterinário</span>
+        <span>{isAdmin ? 'Painel Administrativo' : 'Painel do Médico Veterinário'}</span>
         <span>›</span>
         <span className="text-slate-800 font-semibold">Atendimento Clínico</span>
       </div>
@@ -609,10 +684,10 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
             atendimento parte da agenda do serviço de agendamento.
           </p>
           <button
-            onClick={() => onNavigate('vet-patients')}
+            onClick={() => onNavigate(isAdmin ? 'admin-clinical' : 'vet-patients')}
             className="mt-4 px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Ver pacientes cadastrados
+            {isAdmin ? 'Voltar à fila de atendimentos' : 'Ver pacientes cadastrados'}
           </button>
         </div>
       )}
@@ -692,16 +767,27 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
                 </div>
               </div>
 
-              <button
-                onClick={handleFinish}
-                disabled={isLocked || pendingAction === 'finish'}
-                className="px-5 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  {pendingAction === 'finish' ? 'Finalizando...' : 'Finalizar Atendimento'}
-                </span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancelAttendance}
+                  disabled={isLocked || pendingAction === 'cancel'}
+                  className="px-4 py-2.5 border border-red-200 bg-white hover:bg-red-50 text-red-600 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="w-4 h-4" />
+                  <span>{pendingAction === 'cancel' ? 'Cancelando...' : 'Cancelar Atendimento'}</span>
+                </button>
+
+                <button
+                  onClick={handleFinish}
+                  disabled={isLocked || pendingAction === 'finish'}
+                  className="px-5 py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {pendingAction === 'finish' ? 'Finalizando...' : 'Finalizar Atendimento'}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1166,6 +1252,32 @@ export const VetClinicalExam: React.FC<VetClinicalExamProps> = ({ onNavigate }) 
                     <span>Valor base</span>
                     <span className="font-mono">{formatCurrency(valor?.valorBase)}</span>
                   </div>
+
+                  {!isLocked && (
+                    <div className="flex items-center gap-2 py-1">
+                      <select
+                        value={servicoBaseId}
+                        onChange={(event) => setServicoBaseId(event.target.value)}
+                        className="flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] bg-white"
+                      >
+                        <option value="">Redefinir com outro serviço...</option>
+                        {catalogoAtivos
+                          .filter((item) => item.tipo === 'SERVICO')
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.nome} — {formatCurrency(item.valorBase)}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={handleDefinirValorBase}
+                        disabled={!servicoBaseId || pendingAction === 'valorBase'}
+                        className="px-2 py-1.5 border border-slate-300 rounded-lg text-[10px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        {pendingAction === 'valorBase' ? '...' : 'Aplicar'}
+                      </button>
+                    </div>
+                  )}
                   <div className="flex justify-between text-slate-500">
                     <span>Procedimentos</span>
                     <span className="font-mono">{formatCurrency(valor?.valorProcedimentos)}</span>

@@ -536,4 +536,14 @@ export const clinicoService = {
   async consultarValor(atendimentoId: number): Promise<ValorAtendimentoApi> {
     return apiClient<ValorAtendimentoApi>(`/v1/atendimentos/${atendimentoId}/valor`);
   },
+
+  async definirValorBase(
+    atendimentoId: number,
+    servicoId: number
+  ): Promise<ValorAtendimentoApi> {
+    return apiClient<ValorAtendimentoApi>(`/v1/atendimentos/${atendimentoId}/valor-base`, {
+      method: 'PATCH',
+      body: JSON.stringify({ servicoId }),
+    });
+  },
 };

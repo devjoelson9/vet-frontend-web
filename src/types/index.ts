@@ -14,15 +14,23 @@ export type AppScreen =
   | 'admin-catalog'
   | 'admin-availability'
   | 'admin-medications'
+  | 'admin-clinical'
+  | 'admin-exam'
+  | 'admin-records'
+  | 'admin-billing'
+  | 'admin-patients'
   // Reception
   | 'reception-dashboard'
   | 'reception-tutors'
   | 'reception-new-tutor'
   | 'reception-schedule'
+  | 'reception-billing'
+  | 'reception-records'
   // Vet
   | 'vet-queue'
   | 'vet-exam'
   | 'vet-patients'
+  | 'vet-records'
   // Tutor
   | 'tutor-home'
   | 'tutor-pets'

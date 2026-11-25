@@ -1,10 +1,10 @@
 import React from 'react';
 import { doctorAvatarUrl } from '../../assets/images';
 import {
+  History,
   LayoutDashboard,
   LogOut,
   PawPrint,
-  Stethoscope,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
 import { AppScreen } from '../../types';
@@ -69,6 +69,17 @@ export const VetLayout: React.FC<VetLayoutProps> = ({
               >
                 <PawPrint className="w-4 h-4 text-[#0e5a60]" />
                 <span>Pacientes</span>
+              </button>
+              <button
+                onClick={() => onNavigate('vet-records')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  currentScreen === 'vet-records'
+                    ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <History className="w-4 h-4 text-[#0e5a60]" />
+                <span>Histórico Clínico</span>
               </button>
             </div>
           </div>

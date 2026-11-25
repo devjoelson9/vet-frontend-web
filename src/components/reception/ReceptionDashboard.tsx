@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Calendar,
   Users,
@@ -10,10 +10,12 @@ import {
   Plus,
   RefreshCw,
   PawPrint,
+  FileText,
 } from 'lucide-react';
 import { AppScreen } from '../../types';
 import type { AnimalApi } from '../../types/api';
 import { animalService } from '../../services/animalService';
+import { clinicoService } from '../../services/clinicoService';
 import { getApiErrorMessage } from '../../services/apiError';
 import {
   agendamentoService,
@@ -21,6 +23,11 @@ import {
   toIsoDate,
   type AgendamentoApi,
 } from '../../services/agendamentoService';
+import {
+  veterinarioService,
+  type VeterinarioResumoApi,
+} from '../../services/veterinarioService';
+import { setReceptionRecordTarget } from '../../utils/receptionRecordTarget';
 
 interface ReceptionDashboardProps {
   onNavigate: (screen: AppScreen) => void;
@@ -44,6 +51,29 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
   const [actionError, setActionError] = useState('');
   const [pendingCheckInId, setPendingCheckInId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [vetFilter, setVetFilter] = useState('');
+  const [vets, setVets] = useState<VeterinarioResumoApi[]>([]);
+  const checkInSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const vetNames = new Map<number, string>();
+  vets.forEach((vet) => vetNames.set(vet.id, vet.nomeCompleto));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    veterinarioService
+      .listar()
+      .then((result) => {
+        if (!cancelled) setVets(result);
+      })
+      .catch(() => {
+        if (!cancelled) setVets([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -64,19 +94,37 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
       const today = toIsoDate(new Date());
 
       try {
-        const [appointments, queue] = await Promise.all([
+        const [appointments, queue, attendances] = await Promise.all([
           agendamentoService.listar({ inicio: today, fim: today }),
-          agendamentoService.listarFilaEspera({ data: today }),
+          agendamentoService.listarFilaEspera({
+            data: today,
+            veterinarioId: vetFilter ? Number(vetFilter) : undefined,
+          }),
+          clinicoService.listarAtendimentos({
+            inicio: today,
+            fim: today,
+            veterinarioId: vetFilter ? Number(vetFilter) : undefined,
+            size: 100,
+          }),
         ]);
 
         if (cancelled) return;
 
+        const appointmentIdsWithAttendance = new Set(
+          attendances.content
+            .map((atendimento) => atendimento.agendamentoId)
+            .filter((id): id is number => id != null)
+        );
+        const waitingQueue = queue.filter(
+          (item) => !appointmentIdsWithAttendance.has(item.id)
+        );
+
         setTodayAppointments(appointments);
-        setWaiting(queue);
+        setWaiting(waitingQueue);
 
         const animalsMap: Record<number, AnimalApi | null> = {};
         await Promise.all(
-          [...appointments, ...queue].map(async (item) => {
+          [...appointments, ...waitingQueue].map(async (item) => {
             if (animalsMap[item.animalId] !== undefined) return;
 
             const tutorId = item.tutorId;
@@ -106,7 +154,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, vetFilter]);
 
   const handleCheckIn = async (item: AgendamentoApi) => {
     setPendingCheckInId(item.id);
@@ -124,22 +172,19 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
     }
   };
 
-  const now = new Date();
-  const upcoming = todayAppointments
+  const pendingCheckIns = todayAppointments
     .filter((item) => item.status === 'AGENDADO')
-    .filter((item) => {
-      const [hour, minute] = item.horaInicio.split(':').map(Number);
-      const startsAt = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        hour ?? 0,
-        minute ?? 0
-      );
-      return startsAt.getTime() >= now.getTime();
-    })
-    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
-    .slice(0, 4);
+    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+
+  const openMedicalRecord = (item: AgendamentoApi) => {
+    if (!item.tutorId) return;
+
+    setReceptionRecordTarget({
+      tutorId: item.tutorId,
+      animalId: item.animalId,
+    });
+    onNavigate('reception-records');
+  };
 
   const checkInsToday = todayAppointments.filter((item) => item.horarioCheckin).length;
   const completedToday = todayAppointments.filter(
@@ -290,9 +335,24 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                   </p>
                 </div>
               </div>
-              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
-                {waiting.length} na fila
-              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={vetFilter}
+                  onChange={(event) => setVetFilter(event.target.value)}
+                  title="Filtrar fila por veterinário"
+                  className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-100"
+                >
+                  <option value="">Todos os veterinários</option>
+                  {vets.map((vet) => (
+                    <option key={vet.id} value={vet.id}>
+                      {vet.nomeCompleto}
+                    </option>
+                  ))}
+                </select>
+                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
+                  {waiting.length} na fila
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -367,7 +427,8 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                           </td>
                           <td className="py-3.5 px-4">
                             <p className="font-bold text-slate-800">
-                              Veterinário #{item.veterinarioId}
+                              {vetNames.get(item.veterinarioId) ??
+                                `Veterinário #${item.veterinarioId}`}
                             </p>
                             <p className="text-[11px] text-teal-700 font-medium">
                               {formatHora(item.horaInicio)} – {formatHora(item.horaFim)}
@@ -381,10 +442,13 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <button
-                              onClick={() => onNavigate('vet-queue')}
-                              className="px-2.5 py-1 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                              onClick={() => openMedicalRecord(item)}
+                              disabled={!item.tutorId}
+                              className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-[#0e5a60] rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1 disabled:opacity-40"
+                              title="Abrir prontuário do animal"
                             >
-                              Chamar
+                              <FileText className="w-3.5 h-3.5" />
+                              Prontuário
                             </button>
                           </td>
                         </tr>
@@ -403,13 +467,17 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 flex flex-col justify-between">
+        <div
+          ref={checkInSectionRef}
+          id="reception-checkin"
+          className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 flex flex-col justify-between scroll-mt-24"
+        >
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#0e5a60]" />
                 <h2 className="text-base font-bold text-slate-900 font-serif">
-                  Próximos Agendamentos
+                  Aguardando Check-in
                 </h2>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-teal-50 text-[#0e5a60] text-[11px] font-bold">
@@ -417,20 +485,20 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
               </span>
             </div>
 
-            <div className="space-y-4 mt-4">
+            <div className="space-y-4 mt-4 max-h-[430px] overflow-y-auto pr-1">
               {isLoading && (
                 <p className="text-xs text-slate-500">Carregando agendamentos...</p>
               )}
 
-              {!isLoading && !error && upcoming.length === 0 && (
+              {!isLoading && !error && pendingCheckIns.length === 0 && (
                 <p className="text-xs text-slate-500">
-                  Nenhum agendamento pendente para o restante do dia.
+                  Nenhum agendamento aguardando check-in hoje.
                 </p>
               )}
 
               {!isLoading &&
                 !error &&
-                upcoming.map((item) => {
+                pendingCheckIns.map((item) => {
                   const animal = animals[item.animalId];
 
                   return (
@@ -456,7 +524,8 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onNaviga
                             {animal?.tutorNome ?? `Tutor #${item.tutorId ?? '—'}`}
                           </p>
                           <p className="text-[10px] text-teal-700 mt-0.5 font-medium">
-                            Veterinário #{item.veterinarioId}
+                            {vetNames.get(item.veterinarioId) ??
+                              `Veterinário #${item.veterinarioId}`}
                           </p>
                         </div>
                         <button

@@ -4,6 +4,7 @@ import {
   CreditCard,
   Phone,
   Mail,
+  MapPin,
   Lock,
   Eye,
   EyeOff,
@@ -36,6 +37,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,6 +80,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
         email,
         senha: password,
         telefone: phone,
+        endereco: address,
       });
       setRegistered(true);
     } catch (err) {
@@ -282,6 +285,29 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
                       autoComplete="email"
                       required
                       className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="register-address"
+                    className="mb-1.5 block text-xs font-semibold text-slate-700"
+                  >
+                    Endereço
+                  </label>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                    <textarea
+                      id="register-address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Rua, número, bairro, cidade - UF, CEP"
+                      autoComplete="street-address"
+                      required
+                      maxLength={500}
+                      rows={2}
+                      className="w-full min-h-20 pl-10 pr-4 py-3 bg-slate-50/70 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:border-[#0e5a60] focus:ring-4 focus:ring-[#0e5a60]/10 transition-all resize-none"
                     />
                   </div>
                 </div>
