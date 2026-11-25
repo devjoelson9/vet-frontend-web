@@ -118,7 +118,9 @@ function AppContent() {
   if (user?.role === 'admin') {
     mainContent = (
       <AdminLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
-        {currentScreen === 'admin-dashboard' && <AdminDashboard />}
+        {currentScreen === 'admin-dashboard' && (
+          <AdminDashboard onNavigate={setCurrentScreen} />
+        )}
         {currentScreen === 'admin-users' && <AdminUsers onNavigate={setCurrentScreen} />}
         {currentScreen === 'admin-new-user' && <AdminNewUser onNavigate={setCurrentScreen} />}
         {currentScreen === 'admin-tutors' && <AdminTutors />}
@@ -158,7 +160,7 @@ function AppContent() {
           'admin-records',
           'admin-billing',
           'admin-patients',
-        ].includes(currentScreen) && <AdminDashboard />}
+        ].includes(currentScreen) && <AdminDashboard onNavigate={setCurrentScreen} />}
       </AdminLayout>
     );
   }

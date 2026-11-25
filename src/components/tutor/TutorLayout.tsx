@@ -1,16 +1,14 @@
 import React from 'react';
-import { vetHugDogUrl } from '../../assets/images';
-import { MaisVetLogo } from '../common/MaisVetLogo';
-import { AppScreen } from '../../types';
 import {
   Calendar,
   CalendarDays,
-  Heart,
   FileText,
+  Heart,
   Home,
-  LogOut,
   UserRound,
 } from 'lucide-react';
+import { AppShell, type ShellNavSection } from '../common/AppShell';
+import { AppScreen } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 
 interface TutorLayoutProps {
@@ -25,153 +23,67 @@ export const TutorLayout: React.FC<TutorLayoutProps> = ({
   children,
 }) => {
   const { user, logout } = useAuth();
+  const firstName = (user?.name || 'Tutor').trim().split(/\s+/)[0];
 
   const handleLogout = () => {
     logout();
     onNavigate('auth-login');
   };
 
-  const navItems = [
-    { id: 'tutor-home' as AppScreen, label: 'Início', icon: Home, testId: 'nav-inicio' },
-    { id: 'tutor-pets' as AppScreen, label: 'Meus Pets', icon: Heart, testId: 'nav-meus-pets' },
+  const sections: ShellNavSection[] = [
     {
-      id: 'tutor-profile' as AppScreen,
-      label: 'Meu Perfil',
-      icon: UserRound,
-      testId: 'nav-meu-perfil',
+      title: 'Meu espaço',
+      items: [
+        { id: 'tutor-home', label: 'Início', icon: Home, testId: 'nav-inicio' },
+        { id: 'tutor-pets', label: 'Meus pets', icon: Heart, testId: 'nav-meus-pets' },
+        { id: 'tutor-profile', label: 'Meu perfil', icon: UserRound, testId: 'nav-meu-perfil' },
+      ],
     },
     {
-      id: 'tutor-booking' as AppScreen,
-      label: 'Agendar Consulta',
-      icon: Calendar,
-      testId: 'nav-agendar-consulta',
-    },
-    {
-      id: 'tutor-appointments' as AppScreen,
-      label: 'Minhas Consultas',
-      icon: CalendarDays,
-      testId: 'nav-minhas-consultas',
-    },
-    {
-      id: 'tutor-records' as AppScreen,
-      label: 'Prontuário',
-      icon: FileText,
-      testId: 'nav-prontuario',
+      title: 'Consultas & saúde',
+      items: [
+        {
+          id: 'tutor-booking',
+          label: 'Agendar consulta',
+          icon: Calendar,
+          testId: 'nav-agendar-consulta',
+        },
+        {
+          id: 'tutor-appointments',
+          label: 'Minhas consultas',
+          icon: CalendarDays,
+          testId: 'nav-minhas-consultas',
+        },
+        {
+          id: 'tutor-records',
+          label: 'Prontuário',
+          icon: FileText,
+          testId: 'nav-prontuario',
+        },
+      ],
     },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafb] flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30">
-        <div>
-          {/* Brand header */}
-          <div className="p-5 border-b border-slate-100">
-            <MaisVetLogo />
-            <div className="mt-3">
-              <span className="inline-block px-2.5 py-0.5 bg-teal-50 border border-teal-200 text-[#0e5a60] text-[10px] font-bold tracking-wider rounded-md uppercase">
-                Portal do Tutor
-              </span>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <div className="py-4 px-3 space-y-6">
-            <div>
-              <div className="space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = currentScreen === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => onNavigate(item.id)}
-                      data-testid={item.testId}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0e5a60]/40 ${
-                        isActive
-                          ? 'bg-teal-50 text-[#0e5a60] border border-teal-200/60 shadow-xs'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                      }`}
-                    >
-                      <Icon
-                        className={`w-4 h-4 flex-shrink-0 ${
-                          isActive ? 'text-[#0e5a60]' : 'text-slate-400'
-                        }`}
-                      />
-                      <span className="text-left">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+    <AppShell
+      currentScreen={currentScreen}
+      onNavigate={onNavigate}
+      roleLabel="Portal do tutor"
+      sections={sections}
+      user={user}
+      userSubtitle="Tutor"
+      logoutTestId="tutor-logout"
+      onLogout={handleLogout}
+      headerActions={
+        <div className="hidden text-right leading-tight sm:block">
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-brand-600/60">
+            Bem-vindo de volta
+          </p>
+          <p className="text-[12px] font-bold text-slate-800">Olá, {firstName}</p>
         </div>
-
-        {/* User profile footer */}
-        <div className="p-3 border-t border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img
-              src={vetHugDogUrl}
-              alt={user?.name || 'Mariana Siqueira'}
-              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="truncate">
-              <p className="text-xs font-bold text-slate-800 truncate">
-                {user?.name || 'Mariana Siqueira'}
-              </p>
-              <p className="text-[10px] text-slate-400 truncate">
-                {user?.email || 'tutor@maisvet.com.br'}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            data-testid="tutor-sidebar-logout"
-            title="Sair da sessão"
-            className="p-1.5 text-slate-400 hover:text-red-600 transition-colors rounded-lg hover:bg-slate-50"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Container */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
-        {/* Top bar */}
-        <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="leading-tight">
-            <p className="text-xs font-bold text-slate-800">
-              Olá, {user?.name || 'Mariana Siqueira'}
-            </p>
-           
-          </div>
-
-          <div className="flex items-center gap-3">
-            <img
-              src={vetHugDogUrl}
-              alt={user?.name || 'Mariana Siqueira'}
-              className="w-9 h-9 rounded-full object-cover border border-teal-200"
-              referrerPolicy="no-referrer"
-            />
-            <button
-              type="button"
-              onClick={handleLogout}
-              data-testid="tutor-logout"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-              title="Encerrar sessão"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sair</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Main page content */}
-        <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
-        </main>
-      </div>
-    </div>
+      }
+    >
+      {children}
+    </AppShell>
   );
 };

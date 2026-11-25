@@ -16,10 +16,10 @@ import {
   MailCheck,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
+import { AuthBrandPanel } from './AuthBrandPanel';
 import { AppScreen } from '../../types';
 import { authService } from '../../services/authService';
 import { getApiErrorMessage } from '../../services/apiError';
-import { vetHugDogUrl } from '../../assets/images';
 
 interface RegisterViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -99,48 +99,18 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   return (
     <div className="h-dvh w-full overflow-hidden bg-white flex font-sans">
       {/* Left: Brand / Hero */}
-      <div className="relative hidden lg:flex lg:w-[38%] xl:w-[40%] flex-col justify-between overflow-hidden">
-        <img
-          src={vetHugDogUrl}
-          alt="Veterinária abraçando cão Golden Retriever na clínica"
-          className="absolute inset-0 h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-br from-[#06373b]/95  to-[#0e5a60]/25" />
-        
-        <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-14">
-          <MaisVetLogo size="lg" whiteText />
-
-          <div className="max-w-md">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-100 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal-300" />
-              Cadastro do tutor
-            </span>
-            <h1 className="mt-5 font-serif text-3xl xl:text-[2.7rem] font-bold leading-[1.12] tracking-tight text-white">
-              A saúde do seu pet
-              <br />
-              <span className="font-normal italic text-teal-100">começa aqui.</span>
-            </h1>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-teal-50/80">
-              Crie sua conta para acompanhar consultas, vacinas, receitas e o histórico
-              completo do seu companheiro em um só lugar.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {['Agendamento online', 'Prontuário digital', 'Atendimento humanizado'].map((item) => (
-              <span
-                key={item}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-medium text-white/90 backdrop-blur-sm"
-              >
-                <Check className="h-3 w-3 text-teal-300" />
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <AuthBrandPanel
+        badge="Cadastro do tutor"
+        title={
+          <>
+            A saúde do seu pet
+            <br />
+            <span className="font-normal italic text-jade-300">começa aqui.</span>
+          </>
+        }
+        description="Crie sua conta para acompanhar consultas, vacinas, receitas e o histórico completo do seu companheiro em um só lugar."
+        features={['Agendamento online', 'Prontuário digital', 'Atendimento humanizado']}
+      />
 
       {/* Right: Registration */}
       <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar bg-[#f7fafb]">

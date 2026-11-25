@@ -12,10 +12,10 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
+import { AuthBrandPanel } from './AuthBrandPanel';
 import { AppScreen } from '../../types';
 import { authService } from '../../services/authService';
 import { getApiErrorMessage } from '../../services/apiError';
-import { vetHugDogUrl } from '../../assets/images';
 
 interface ResetPasswordViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -91,39 +91,19 @@ export const ResetPasswordView: React.FC<ResetPasswordViewProps> = ({ onNavigate
   return (
     <div className="h-dvh w-full overflow-hidden bg-white flex font-sans">
       {/* Left: Brand / Hero (menor que o formulário) */}
-      <div className="relative hidden lg:flex lg:w-[34%] xl:w-[36%] flex-col justify-between overflow-hidden">
-        <img
-          src={vetHugDogUrl}
-          alt="Veterinária abraçando cão Golden Retriever na clínica"
-          className="absolute inset-0 h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-br from-[#06373b]/95  to-[#0e5a60]/25" />
-
-        <div className="relative z-10 flex h-full flex-col justify-between p-8 xl:p-10">
-          <MaisVetLogo size="lg" whiteText />
-
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-100 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal-300" />
-              Novo acesso
-            </span>
-            <h1 className="mt-4 font-serif text-2xl xl:text-3xl font-bold leading-[1.15] tracking-tight text-white">
-              A mesma dedicação,
-              <br />
-              <span className="font-normal italic text-teal-100">um novo acesso.</span>
-            </h1>
-            <p className="mt-3 max-w-xs text-xs leading-relaxed text-teal-50/80">
-              Crie uma senha forte para proteger os dados da sua conta e do seu pet.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/85">
-          
-          </div>
-        </div>
-      </div>
+      <AuthBrandPanel
+        badge="Novo acesso"
+        title={
+          <>
+            A mesma dedicação,
+            <br />
+            <span className="font-normal italic text-jade-300">um novo acesso.</span>
+          </>
+        }
+        description="Crie uma senha forte para proteger os dados da sua conta e do seu pet."
+        features={['Senha criptografada', 'Sessão protegida']}
+        className="lg:w-[34%] xl:w-[36%]"
+      />
 
       {/* Right: Reset password (maior destaque) */}
       <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar bg-[#f7fafb]">
