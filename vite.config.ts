@@ -1,9 +1,11 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({mode}) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -12,10 +14,11 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // Proxy para redirecionar chamadas /api para o backend/Gateway Spring Boot
+      // Proxy para redirecionar chamadas /api para o API Gateway.
+      // Em Docker, o gateway está em http://localhost:8000.
       proxy: {
         '/api': {
-          target: process.env.VITE_BACKEND_URL || 'http://localhost:8080',
+          target: env.VITE_BACKEND_URL || 'http://localhost:8000',
           changeOrigin: true,
           secure: false,
         },

@@ -1,20 +1,80 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# MaisVet — Frontend Web
 
-# Run and deploy your AI Studio app
+Interface web da plataforma **MaisVet** de gestão veterinária. SPA em React + TypeScript que consome os microsserviços do projeto através do API Gateway (Nginx).
 
-This contains everything you need to run your app locally.
+## Perfis de acesso
 
-View your app in AI Studio: https://ai.studio/apps/ce1a3140-4971-48b0-9ac3-64b048ed603d
+- **Administrador:** visão geral, usuários internos e tutores.
+- **Recepção:** tutores, animais, agendamentos e prontuários.
+- **Veterinário:** fila de espera, atendimentos, prescrições e catálogo.
+- **Tutor:** dados do cadastro, animais e histórico.
 
-## Run Locally
+## Stack
 
-**Prerequisites:**  Node.js
+- React 19 + TypeScript
+- Vite
+- Tailwind CSS 4
+- lucide-react (ícones) e motion (animações)
 
+## Pré-requisitos
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Node.js 20+
+- API Gateway em execução (por padrão em `http://localhost:8000`)
+
+## Configuração
+
+Copie `.env.example` para `.env` e ajuste as variáveis:
+
+| Variável | Descrição | Padrão |
+| --- | --- | --- |
+| `VITE_API_GATEWAY_URL` | URL base das chamadas à API | `/api` |
+| `VITE_API_BASE_URL` | Alternativa usada quando a anterior não é definida | `/api` |
+| `VITE_BACKEND_URL` | Destino do proxy do Vite em desenvolvimento | `http://localhost:8000` |
+
+Em Docker, o frontend e o gateway compartilham a mesma origem, então `/api` é suficiente. Em desenvolvimento, o Vite faz proxy de `/api` para `VITE_BACKEND_URL`.
+
+## Desenvolvimento
+
+```bash
+npm install
+npm run dev
+```
+
+Aplicação disponível em `http://localhost:3000`.
+
+## Build
+
+```bash
+npm run build     # gera os arquivos estáticos em dist/
+npm run preview   # serve o build localmente
+```
+
+## Docker
+
+O `Dockerfile` usa build em dois estágios: compila com Node 20 e serve os arquivos estáticos com Nginx, incluindo fallback de SPA e cache longo para assets versionados.
+
+```bash
+docker build -t vet-frontend-web .
+```
+
+A orquestração completa (frontend, gateway e serviços) está em `vet-infrastructure/docker-compose.yml`.
+
+## Scripts
+
+| Script | Descrição |
+| --- | --- |
+| `npm run dev` | Servidor de desenvolvimento na porta 3000 |
+| `npm run build` | Build de produção |
+| `npm run preview` | Pré-visualização do build |
+| `npm run lint` | Verificação de tipos (`tsc --noEmit`) |
+
+## Estrutura
+
+```
+src/
+├── components/   # Telas e componentes por perfil (admin, auth, reception, tutor, vet, common)
+├── context/      # Autenticação e estado global
+├── services/     # Clientes HTTP por domínio (tutores, animais, agendamentos, clínico, faturamento)
+├── types/        # Tipos compartilhados da API
+└── utils/        # Funções auxiliares
+```

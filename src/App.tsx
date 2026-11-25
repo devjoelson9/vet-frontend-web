@@ -18,7 +18,11 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AdminUsers } from './components/admin/AdminUsers';
 import { AdminNewUser } from './components/admin/AdminNewUser';
+import { AdminTutors } from './components/admin/AdminTutors';
 import { AdminCatalog } from './components/admin/AdminCatalog';
+import { AdminDisponibilidades } from './components/admin/AdminDisponibilidades';
+import { AdminMedicamentos } from './components/admin/AdminMedicamentos';
+import { AdminClinical } from './components/admin/AdminClinical';
 
 // Reception screens
 import { ReceptionLayout } from './components/reception/ReceptionLayout';
@@ -26,27 +30,36 @@ import { ReceptionDashboard } from './components/reception/ReceptionDashboard';
 import { TutorsAndPetsManagement } from './components/reception/TutorsAndPetsManagement';
 import { NewTutorAndPet } from './components/reception/NewTutorAndPet';
 import { ClinicSchedule } from './components/reception/ClinicSchedule';
-import { ReceptionCheckout } from './components/reception/ReceptionCheckout';
+import { ReceptionBilling } from './components/reception/ReceptionBilling';
+import { ReceptionMedicalRecords } from './components/reception/ReceptionMedicalRecords';
 
 // Vet screens
 import { VetLayout } from './components/vet/VetLayout';
 import { VetWaitingRoom } from './components/vet/VetWaitingRoom';
 import { VetClinicalExam } from './components/vet/VetClinicalExam';
+import { VetPatients } from './components/vet/VetPatients';
+import { VetMedicalRecords } from './components/vet/VetMedicalRecords';
+import { setVetRecordTarget } from './utils/vetRecordTarget';
 
 // Tutor screens
 import { TutorLayout } from './components/tutor/TutorLayout';
 import { TutorHome } from './components/tutor/TutorHome';
 import { TutorMyPets } from './components/tutor/TutorMyPets';
+import { TutorProfile } from './components/tutor/TutorProfile';
 import { TutorBookingFlow } from './components/tutor/TutorBookingFlow';
+import { TutorAppointments } from './components/tutor/TutorAppointments';
 import { TutorMedicalRecords } from './components/tutor/TutorMedicalRecords';
-import { TutorInvoices } from './components/tutor/TutorInvoices';
 
 // Spring Boot Gateway Modal
 import { GatewayConfigModal } from './components/common/GatewayConfigModal';
 
 function AppContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [currentScreen, setCurrentScreen] = useState<AppScreen>('auth-login');
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>(() => {
+    const isResetPath = window.location.pathname.replace(/\/+$/, '').endsWith('/redefinir-senha');
+    const hasResetToken = new URLSearchParams(window.location.search).has('token');
+    return isResetPath || hasResetToken ? 'auth-reset' : 'auth-login';
+  });
   const [isGatewayModalOpen, setIsGatewayModalOpen] = useState(false);
 
   // Sincroniza a tela inicial quando o usuário autentica ou muda de papel
@@ -105,14 +118,49 @@ function AppContent() {
   if (user?.role === 'admin') {
     mainContent = (
       <AdminLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
-        {currentScreen === 'admin-dashboard' && <AdminDashboard />}
+        {currentScreen === 'admin-dashboard' && (
+          <AdminDashboard onNavigate={setCurrentScreen} />
+        )}
         {currentScreen === 'admin-users' && <AdminUsers onNavigate={setCurrentScreen} />}
         {currentScreen === 'admin-new-user' && <AdminNewUser onNavigate={setCurrentScreen} />}
+        {currentScreen === 'admin-tutors' && <AdminTutors />}
         {currentScreen === 'admin-catalog' && <AdminCatalog />}
+        {currentScreen === 'admin-availability' && <AdminDisponibilidades />}
+        {currentScreen === 'admin-medications' && <AdminMedicamentos />}
+        {currentScreen === 'admin-clinical' && (
+          <AdminClinical onNavigate={setCurrentScreen} />
+        )}
+        {currentScreen === 'admin-exam' && (
+          <VetClinicalExam onNavigate={setCurrentScreen} variant="admin" />
+        )}
+        {currentScreen === 'admin-records' && (
+          <ReceptionMedicalRecords areaLabel="Painel Administrativo" />
+        )}
+        {currentScreen === 'admin-billing' && (
+          <ReceptionBilling
+            onNavigate={setCurrentScreen}
+            recordsScreen="admin-records"
+            areaLabel="Painel Administrativo"
+          />
+        )}
+        {currentScreen === 'admin-patients' && (
+          <VetPatients areaLabel="Painel Administrativo" />
+        )}
         {/* Fallback de telas admin */}
-        {!['admin-dashboard', 'admin-users', 'admin-new-user', 'admin-catalog'].includes(
-          currentScreen
-        ) && <AdminDashboard />}
+        {![
+          'admin-dashboard',
+          'admin-users',
+          'admin-new-user',
+          'admin-tutors',
+          'admin-catalog',
+          'admin-availability',
+          'admin-medications',
+          'admin-clinical',
+          'admin-exam',
+          'admin-records',
+          'admin-billing',
+          'admin-patients',
+        ].includes(currentScreen) && <AdminDashboard onNavigate={setCurrentScreen} />}
       </AdminLayout>
     );
   }
@@ -131,14 +179,16 @@ function AppContent() {
           <NewTutorAndPet onNavigate={setCurrentScreen} />
         )}
         {currentScreen === 'reception-schedule' && <ClinicSchedule />}
-        {currentScreen === 'reception-checkout' && <ReceptionCheckout />}
+        {currentScreen === 'reception-billing' && <ReceptionBilling onNavigate={setCurrentScreen} />}
+        {currentScreen === 'reception-records' && <ReceptionMedicalRecords />}
         {/* Fallback de telas recepção */}
         {![
           'reception-dashboard',
           'reception-tutors',
           'reception-new-tutor',
           'reception-schedule',
-          'reception-checkout',
+          'reception-billing',
+          'reception-records',
         ].includes(currentScreen) && <ReceptionDashboard onNavigate={setCurrentScreen} />}
       </ReceptionLayout>
     );
@@ -150,8 +200,17 @@ function AppContent() {
       <VetLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
         {currentScreen === 'vet-queue' && <VetWaitingRoom onNavigate={setCurrentScreen} />}
         {currentScreen === 'vet-exam' && <VetClinicalExam onNavigate={setCurrentScreen} />}
+        {currentScreen === 'vet-patients' && (
+          <VetPatients
+            onOpenRecords={(animalId) => {
+              setVetRecordTarget(animalId);
+              setCurrentScreen('vet-records');
+            }}
+          />
+        )}
+        {currentScreen === 'vet-records' && <VetMedicalRecords />}
         {/* Fallback */}
-        {!['vet-queue', 'vet-exam'].includes(currentScreen) && (
+        {!['vet-queue', 'vet-exam', 'vet-patients', 'vet-records'].includes(currentScreen) && (
           <VetWaitingRoom onNavigate={setCurrentScreen} />
         )}
       </VetLayout>
@@ -164,16 +223,22 @@ function AppContent() {
       <TutorLayout currentScreen={currentScreen} onNavigate={setCurrentScreen}>
         {currentScreen === 'tutor-home' && <TutorHome onNavigate={setCurrentScreen} />}
         {currentScreen === 'tutor-pets' && <TutorMyPets onNavigate={setCurrentScreen} />}
+        {currentScreen === 'tutor-profile' && (
+          <TutorProfile onNavigate={setCurrentScreen} />
+        )}
         {currentScreen === 'tutor-booking' && <TutorBookingFlow onNavigate={setCurrentScreen} />}
+        {currentScreen === 'tutor-appointments' && (
+          <TutorAppointments onNavigate={setCurrentScreen} />
+        )}
         {currentScreen === 'tutor-records' && <TutorMedicalRecords onNavigate={setCurrentScreen} />}
-        {currentScreen === 'tutor-invoices' && <TutorInvoices />}
         {/* Fallback */}
         {![
           'tutor-home',
           'tutor-pets',
+          'tutor-profile',
           'tutor-booking',
+          'tutor-appointments',
           'tutor-records',
-          'tutor-invoices',
         ].includes(currentScreen) && <TutorHome onNavigate={setCurrentScreen} />}
       </TutorLayout>
     );

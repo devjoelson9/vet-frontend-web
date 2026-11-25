@@ -10,25 +10,38 @@ export type AppScreen =
   | 'admin-dashboard'
   | 'admin-users'
   | 'admin-new-user'
+  | 'admin-tutors'
   | 'admin-catalog'
+  | 'admin-availability'
+  | 'admin-medications'
+  | 'admin-clinical'
+  | 'admin-exam'
+  | 'admin-records'
+  | 'admin-billing'
+  | 'admin-patients'
   // Reception
   | 'reception-dashboard'
   | 'reception-tutors'
   | 'reception-new-tutor'
   | 'reception-schedule'
-  | 'reception-checkout'
+  | 'reception-billing'
+  | 'reception-records'
   // Vet
   | 'vet-queue'
   | 'vet-exam'
+  | 'vet-patients'
+  | 'vet-records'
   // Tutor
   | 'tutor-home'
   | 'tutor-pets'
+  | 'tutor-profile'
   | 'tutor-booking'
-  | 'tutor-records'
-  | 'tutor-invoices';
+  | 'tutor-appointments'
+  | 'tutor-records';
 
 export interface User {
   id: string;
+  veterinarioId?: string;
   name: string;
   role: UserRole;
   email: string;
@@ -46,7 +59,7 @@ export interface Pet {
   name: string;
   species: 'Cão' | 'Gato' | 'Ave' | 'Outro';
   breed: string;
-  gender: 'Macho' | 'Fêmea';
+  gender: 'Macho' | 'Fêmea' | 'Não informado';
   neutered: boolean;
   age: string;
   birthDate?: string;
@@ -84,6 +97,8 @@ export interface Tutor {
   registeredSince: string;
   petsCount: number;
   pets: Pet[];
+  addressText?: string;
+  apiStatus?: string;
 }
 
 export interface QueueItem {

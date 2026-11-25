@@ -1,332 +1,567 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Plus,
   Clock,
-  User,
   CheckCircle2,
   X,
   Send,
   ChevronLeft,
   ChevronRight,
-  Filter,
+  AlertCircle,
+  RefreshCw,
+  PawPrint,
+  Check,
+  Pencil,
 } from 'lucide-react';
+import type { AnimalApi, TutorApi } from '../../types/api';
+import { animalService } from '../../services/animalService';
+import { tutorService } from '../../services/tutorService';
+import {
+  veterinarioService,
+  type VeterinarioResumoApi,
+} from '../../services/veterinarioService';
+import { getApiErrorMessage } from '../../services/apiError';
+import {
+  agendamentoService,
+  addDays,
+  formatHora,
+  toIsoDate,
+  type AgendamentoApi,
+  type HorarioDisponivelApi,
+  type StatusAgendamento,
+} from '../../services/agendamentoService';
+
+const WEEKDAY_LABEL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+const STATUS_LABEL: Record<StatusAgendamento, string> = {
+  AGENDADO: 'Agendado',
+  AGUARDANDO_ATENDIMENTO: 'Na recepção',
+  ATENDIMENTO_REALIZADO: 'Atendido',
+  CONCLUIDO: 'Concluído',
+  CANCELADO: 'Cancelado',
+};
+
+const STATUS_STYLE: Record<StatusAgendamento, string> = {
+  AGENDADO: 'bg-blue-50 text-blue-800 border-blue-200',
+  AGUARDANDO_ATENDIMENTO: 'bg-teal-50 text-teal-900 border-teal-200',
+  ATENDIMENTO_REALIZADO: 'bg-amber-50 text-amber-900 border-amber-200',
+  CONCLUIDO: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  CANCELADO: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+function startOfWeek(date: Date): Date {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const weekday = result.getDay();
+  result.setDate(result.getDate() + (weekday === 0 ? -6 : 1 - weekday));
+  return result;
+}
 
 export const ClinicSchedule: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
-  const [selectedVet, setSelectedVet] = useState(
-    'Dr. Ricardo Mendes - Clínico Geral & Cirurgia'
-  );
+  const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [appointments, setAppointments] = useState<AgendamentoApi[]>([]);
+  const [animals, setAnimals] = useState<Record<number, AnimalApi | null>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [vets, setVets] = useState<VeterinarioResumoApi[]>([]);
+  const [pendingActionId, setPendingActionId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
-  // Form states in drawer
-  const [searchPet, setSearchPet] = useState('Claudia Ramos - Pipoca (Shih-tzu)');
-  const [responsibleVet, setResponsibleVet] = useState('Dr. Ricardo Mendes - Clínica Geral & Cirurgia');
-  const [serviceType, setServiceType] = useState('Consulta de Retorno / Acompanhamento');
-  const [date, setDate] = useState('2025-05-24');
-  const [time, setTime] = useState('14:45');
-  const [notes, setNotes] = useState('Verificação de pós-operatório e retirada de pontos');
+  const [tutorTermo, setTutorTermo] = useState('');
+  const [tutors, setTutors] = useState<TutorApi[]>([]);
+  const [tutorId, setTutorId] = useState('');
+  const [animalsForTutor, setAnimalsForTutor] = useState<AnimalApi[]>([]);
+  const [animalId, setAnimalId] = useState('');
+  const [veterinarioId, setVeterinarioId] = useState('');
+  const [data, setData] = useState(() => toIsoDate(new Date()));
+  const [horarios, setHorarios] = useState<HorarioDisponivelApi[]>([]);
+  const [horaInicio, setHoraInicio] = useState('');
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotError, setSlotError] = useState('');
 
-  const days = [
-    { label: 'Segunda', date: '19/05' },
-    { label: 'Terça', date: '20/05' },
-    { label: 'Quarta', date: '21/05' },
-    { label: 'Quinta', date: '22/05' },
-    { label: 'Sexta', date: '23/05' },
-    { label: 'Sábado', date: '24/05', active: true },
-  ];
+  useEffect(() => {
+    veterinarioService
+      .listar()
+      .then(setVets)
+      .catch(() => setVets([]));
+  }, []);
 
-  const timeSlots = [
-    '08:00',
-    '08:30',
-    '09:00',
-    '09:30',
-    '10:00',
-    '10:30',
-    '11:00',
-    '12:00',
-    '13:00',
-    '13:30',
-    '14:00',
-    '14:30',
-    '15:00',
-    '16:00',
-    '17:00',
-  ];
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setReloadKey((value) => value + 1);
+    }, 30000);
 
-  const handleCreateAppointment = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert('Agendamento confirmado e notificação enviada ao WhatsApp da tutora!');
-    setIsDrawerOpen(false);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const weekStart = startOfWeek(anchorDate);
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const inicio = toIsoDate(weekStart);
+  const fim = toIsoDate(addDays(weekStart, 6));
+  const todayIso = toIsoDate(new Date());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAgenda() {
+      setIsLoading(true);
+      setLoadError('');
+
+      try {
+        const result = await agendamentoService.listar({ inicio, fim });
+
+        if (cancelled) return;
+
+        setAppointments(result);
+
+        const animalsMap: Record<number, AnimalApi | null> = {};
+        await Promise.all(
+          result.map(async (item) => {
+            if (animalsMap[item.animalId] !== undefined || !item.tutorId) return;
+            animalsMap[item.animalId] = await animalService
+              .getByTutor(item.tutorId, item.animalId)
+              .catch(() => null);
+          })
+        );
+
+        if (!cancelled) setAnimals(animalsMap);
+      } catch (error) {
+        if (cancelled) return;
+
+        setAppointments([]);
+        setAnimals({});
+        setLoadError(getApiErrorMessage(error, 'Não foi possível carregar a agenda da semana.'));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadAgenda();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inicio, fim, reloadKey]);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const result = await tutorService.list({
+          termo: tutorTermo.trim() || undefined,
+          size: 50,
+        });
+
+        if (!cancelled) setTutors(result.content);
+      } catch {
+        if (!cancelled) setTutors([]);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [tutorTermo, isDrawerOpen]);
+
+  useEffect(() => {
+    if (!tutorId) {
+      setAnimalsForTutor([]);
+      setAnimalId('');
+      return;
+    }
+
+    let cancelled = false;
+
+    animalService
+      .listByTutor(Number(tutorId))
+      .then((result) => {
+        if (cancelled) return;
+        setAnimalsForTutor(result.content);
+        setAnimalId((current) =>
+          current && result.content.some((animal) => String(animal.id) === current)
+            ? current
+            : ''
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAnimalsForTutor([]);
+        setAnimalId('');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tutorId]);
+
+  useEffect(() => {
+    const vetId = Number(veterinarioId);
+
+    if (!isDrawerOpen || !vetId || !data) {
+      setHorarios([]);
+      setHoraInicio('');
+      setSlotError('');
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSlots(true);
+    setSlotError('');
+    if (editingId === null) setHoraInicio('');
+
+    agendamentoService
+      .horariosDisponiveis(vetId, data)
+      .then((result) => {
+        if (!cancelled) setHorarios(result);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setHorarios([]);
+        setSlotError(
+          getApiErrorMessage(error, 'Não foi possível consultar os horários disponíveis.')
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSlots(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [veterinarioId, data, isDrawerOpen, editingId]);
+
+  const openNew = () => {
+    setEditingId(null);
+    setFormError('');
+    setTutorTermo('');
+    setTutorId('');
+    setAnimalsForTutor([]);
+    setAnimalId('');
+    setVeterinarioId('');
+    setData(todayIso);
+    setHorarios([]);
+    setHoraInicio('');
+    setSlotError('');
+    setIsDrawerOpen(true);
   };
+
+  const openEdit = (item: AgendamentoApi) => {
+    setEditingId(item.id);
+    setFormError('');
+    setTutorTermo(animals[item.animalId]?.tutorNome ?? '');
+    setTutorId(item.tutorId ? String(item.tutorId) : '');
+    setAnimalId(String(item.animalId));
+    setVeterinarioId(String(item.veterinarioId));
+    setData(item.data);
+    setHoraInicio(formatHora(item.horaInicio));
+    setHorarios([]);
+    setSlotError('');
+    setIsDrawerOpen(true);
+  };
+
+  const handleStatusAction = async (item: AgendamentoApi, status: StatusAgendamento) => {
+    setPendingActionId(item.id);
+    setActionError('');
+
+    try {
+      await agendamentoService.alterarStatus(item.id, status);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Não foi possível alterar o status do agendamento.'));
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handleCancelAppointment = async (item: AgendamentoApi) => {
+    setPendingActionId(item.id);
+    setActionError('');
+
+    try {
+      await agendamentoService.cancelar(item.id);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, 'Não foi possível cancelar o agendamento.'));
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handleCreateAppointment = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+
+    if (!tutorId || !animalId || !veterinarioId || !data || !horaInicio) {
+      setFormError('Preencha tutor, animal, veterinário, data e um horário disponível.');
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError('');
+
+    try {
+      const payload = {
+        tutorId: Number(tutorId),
+        animalId: Number(animalId),
+        veterinarioId: Number(veterinarioId),
+        data,
+        horaInicio,
+      };
+
+      if (editingId) {
+        await agendamentoService.atualizar(editingId, payload);
+      } else {
+        await agendamentoService.criar(payload);
+      }
+
+      setIsDrawerOpen(false);
+      setEditingId(null);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setFormError(
+        getApiErrorMessage(
+          error,
+          editingId
+            ? 'Não foi possível reagendar o agendamento.'
+            : 'Não foi possível criar o agendamento.'
+        )
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const selectedTutor = tutors.find((tutor) => String(tutor.id) === tutorId);
+  const selectedAnimal = animalsForTutor.find((animal) => String(animal.id) === animalId);
+  const morningSlots = horarios.filter((item) => Number(item.horaInicio.slice(0, 2)) < 12);
+  const afternoonSlots = horarios.filter((item) => Number(item.horaInicio.slice(0, 2)) >= 12);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto relative">
-      {/* Breadcrumbs */}
       <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
         <span>Agenda & Consultórios</span>
         <span>›</span>
-        <span className="text-slate-800 font-semibold">Semana 21 • Maio 2025</span>
+        <span className="text-slate-800 font-semibold">
+          Semana de {weekStart.toLocaleDateString('pt-BR')} a{' '}
+          {addDays(weekStart, 6).toLocaleDateString('pt-BR')}
+        </span>
       </div>
 
-      {/* Header and Add button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 font-serif">
             Agenda da Clínica
           </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Agendamentos vindos do serviço de agendamento para a semana selecionada.
+          </p>
         </div>
 
-        <button
-          onClick={() => setIsDrawerOpen(true)}
-          className="px-4 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Novo Agendamento</span>
-        </button>
-      </div>
-
-      {/* Vet selector and calendar mode */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Vet select */}
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-600">
-            Veterinário / Especialidade:
-          </label>
-          <select
-            value={selectedVet}
-            onChange={(e) => setSelectedVet(e.target.value)}
-            className="border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-[#0e5a60]"
+          <button
+            onClick={() => setReloadKey((value) => value + 1)}
+            className="p-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-500 rounded-xl"
+            title="Atualizar agenda"
           >
-            <option>Dr. Ricardo Mendes - Clínico Geral & Cirurgia</option>
-            <option>Dra. Camila Duarte - Dermatologia & Alergologia</option>
-            <option>Dr. Fernando Costa - Medicina Felina</option>
-          </select>
-        </div>
-
-        {/* Date Navigator */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 text-xs">
-            <button className="px-2 py-1 text-slate-500 hover:text-slate-900 font-medium">
-              Hoje
-            </button>
-            <span className="text-slate-300">|</span>
-            <div className="flex items-center gap-1 px-2 font-bold text-slate-800">
-              <CalendarIcon className="w-3.5 h-3.5 text-[#0e5a60]" />
-              <span>Maio 2025</span>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <button
-              onClick={() => setViewMode('day')}
-              className={`px-3 py-1 rounded-lg ${
-                viewMode === 'day' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
-              }`}
-            >
-              Dia
-            </button>
-            <button
-              onClick={() => setViewMode('week')}
-              className={`px-3 py-1 rounded-lg ${
-                viewMode === 'week' ? 'bg-[#0e5a60] text-white shadow-2xs' : 'text-slate-500'
-              }`}
-            >
-              Semana
-            </button>
-            <button
-              onClick={() => setViewMode('month')}
-              className={`px-3 py-1 rounded-lg ${
-                viewMode === 'month' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
-              }`}
-            >
-              Mês
-            </button>
-          </div>
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={openNew}
+            className="px-4 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl transition-all shadow-xs flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Agendamento</span>
+          </button>
         </div>
       </div>
 
-      {/* Legend bar */}
-      <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 gap-3 px-1">
-        <div className="flex items-center gap-5">
-          <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-            Legenda de Atendimento:
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-teal-400" /> Consultas Confirmadas
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#0e5a60]" /> Procedimentos & Cirurgias
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-300" /> Aguardando Confirmação
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-200" /> Horário Bloqueado / Almoço
-          </span>
-        </div>
-        <div>
-          Total: <strong className="text-slate-800">28 atendimentos</strong> agendados esta semana
-        </div>
-      </div>
-
-      {/* Weekly Schedule Grid */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        {/* Days Header */}
-        <div className="grid grid-cols-7 border-b border-slate-200 text-center bg-slate-50/70">
-          <div className="py-3 px-2 border-r border-slate-200 text-slate-400 font-bold text-xs">
-            <Clock className="w-4 h-4 mx-auto" />
+      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 text-xs">
+          <button
+            onClick={() => setAnchorDate((current) => addDays(current, -7))}
+            className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg"
+            title="Semana anterior"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setAnchorDate(new Date())}
+            className="px-2.5 py-1 text-slate-600 hover:text-slate-900 font-medium"
+          >
+            Hoje
+          </button>
+          <div className="flex items-center gap-1 px-2 font-bold text-slate-800">
+            <CalendarIcon className="w-3.5 h-3.5 text-[#0e5a60]" />
+            <span className="capitalize">
+              {weekStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
           </div>
-          {days.map((day) => (
-            <div
-              key={day.date}
-              className={`py-2.5 px-2 border-r last:border-r-0 border-slate-200 ${
-                day.active ? 'bg-teal-50/80 font-bold' : ''
-              }`}
-            >
-              <p className="text-[11px] uppercase text-slate-400">{day.label}</p>
-              <p
-                className={`text-sm font-mono ${
-                  day.active ? 'text-[#0e5a60] font-bold' : 'text-slate-800 font-semibold'
-                }`}
-              >
-                {day.date}
-              </p>
-            </div>
+          <button
+            onClick={() => setAnchorDate((current) => addDays(current, 7))}
+            className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg"
+            title="Próxima semana"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-500">
+          {(Object.keys(STATUS_LABEL) as StatusAgendamento[]).map((status) => (
+            <span key={status} className="flex items-center gap-1.5">
+              <span className={`w-2.5 h-2.5 rounded-full border ${STATUS_STYLE[status]}`} />
+              {STATUS_LABEL[status]}
+            </span>
           ))}
         </div>
+      </div>
 
-        {/* Schedule Slots */}
-        <div className="divide-y divide-slate-100 text-xs">
-          {timeSlots.map((slot) => {
-            const isLunch = slot === '12:00';
+      {loadError && (
+        <div className="bg-white rounded-2xl border border-red-200 shadow-2xs p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">Falha ao carregar a agenda</p>
+            <p className="text-xs text-slate-500 mt-0.5">{loadError}</p>
+          </div>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          {actionError}
+        </div>
+      )}
+
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-px bg-slate-100">
+          {weekDays.map((day) => {
+            const isoDate = toIsoDate(day);
+            const isToday = isoDate === todayIso;
+            const dayAppointments = appointments
+              .filter((item) => item.data === isoDate)
+              .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+
             return (
-              <div key={slot} className="grid grid-cols-7 min-h-[52px]">
-                {/* Time column */}
-                <div className="p-2 border-r border-slate-100 text-slate-400 font-mono text-[11px] flex items-center justify-center">
-                  {slot}
+              <div
+                key={isoDate}
+                className={`bg-white p-3 space-y-2 min-h-[180px] ${
+                  isToday ? 'ring-2 ring-inset ring-teal-300 bg-teal-50/20' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-slate-400">
+                      {WEEKDAY_LABEL[day.getDay()]}
+                    </p>
+                    <p
+                      className={`text-sm font-mono font-bold ${
+                        isToday ? 'text-[#0e5a60]' : 'text-slate-800'
+                      }`}
+                    >
+                      {String(day.getDate()).padStart(2, '0')}/
+                      {String(day.getMonth() + 1).padStart(2, '0')}
+                    </p>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-bold text-slate-500">
+                    {dayAppointments.length}
+                  </span>
                 </div>
 
-                {isLunch ? (
-                  <div className="col-span-6 bg-slate-50/80 flex items-center justify-center text-slate-400 text-xs italic gap-2 py-2">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>12:00 às 13:00 • Intervalo / Almoço da Equipe & Higienização dos Consultórios</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Segunda 19/05 */}
-                    <div className="p-1 border-r border-slate-100 relative">
-                      {slot === '09:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">09:00 – Thor (Golden)</p>
-                          <p className="text-teal-700">Dr. Ricardo • Check-up Anual</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Terça 20/05 */}
-                    <div className="p-1 border-r border-slate-100 relative">
-                      {slot === '08:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">08:00 – Luna (Siamês)</p>
-                          <p className="text-teal-700">Vacina Quádrupla • Dra. Camila</p>
-                        </div>
-                      )}
-                      {slot === '11:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">11:00 – Belinha (Maltês)</p>
-                          <p className="text-teal-700">Limpeza Tártaro</p>
-                        </div>
-                      )}
-                      {slot === '14:00' && (
-                        <div className="p-2 rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">14:00 – Mingau</p>
-                          <p className="text-amber-800">Dr. Fernando • Med. Felina</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quarta 21/05 */}
-                    <div className="p-1 border-r border-slate-100 relative">
-                      {slot === '08:30' && (
-                        <div className="p-2 rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">08:30 – Fred (Beagle)</p>
-                          <p className="text-amber-800">Triagem Inicial</p>
-                        </div>
-                      )}
-                      {slot === '10:30' && (
-                        <div className="p-2 rounded-xl bg-[#0e5a60] text-white text-[10px] shadow-2xs">
-                          <p className="font-bold">10:30 – Castração Nina</p>
-                          <p className="text-teal-200">Dra. Camila • Bloco Cirúrgico B</p>
-                          <span className="mt-1 inline-block px-1.5 py-0.2 rounded bg-teal-800 text-[9px] font-bold uppercase">
-                            Cirurgia Eletiva
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quinta 22/05 */}
-                    <div className="p-1 border-r border-slate-100 relative">
-                      {slot === '09:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">09:00 – Mel (Poodle)</p>
-                          <p className="text-teal-700">Dr. Ricardo • Ortopedia</p>
-                        </div>
-                      )}
-                      {slot === '15:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">15:00 – Paçoca (Spitz)</p>
-                          <p className="text-teal-700">Ultrassonografia Abdominal</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sexta 23/05 */}
-                    <div className="p-1 border-r border-slate-100 relative">
-                      {slot === '08:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">08:00 – Bob (Bulldog)</p>
-                          <p className="text-teal-700">Revisão Dermatológica</p>
-                        </div>
-                      )}
-                      {slot === '16:00' && (
-                        <div className="p-2 rounded-xl bg-slate-100 text-slate-800 border border-slate-200 text-[10px]">
-                          <p className="font-bold">16:00 – Reunião Clínica</p>
-                          <p className="text-slate-500">Discussão de Casos</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sábado 24/05 (Hoje) */}
-                    <div className="p-1 relative bg-teal-50/20">
-                      {slot === '09:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">09:00 – Cacau (Labrador)</p>
-                          <p className="text-teal-700">Vacina Antirrábica</p>
-                        </div>
-                      )}
-                      {slot === '10:00' && (
-                        <div className="p-2 rounded-xl bg-teal-100 text-teal-900 border border-teal-200 text-[10px] shadow-2xs">
-                          <p className="font-bold">10:00 – Simba (SRD)</p>
-                          <p className="text-teal-700">Consulta Geral</p>
-                        </div>
-                      )}
-                      {slot === '14:30' && (
-                        <div className="p-2 rounded-xl bg-teal-200 text-teal-950 border border-teal-300 text-[10px] shadow-xs">
-                          <p className="font-bold">14:45 • Reservando...</p>
-                          <p className="text-teal-800">Pipoca (Shih-tzu)</p>
-                        </div>
-                      )}
-                    </div>
-                  </>
+                {isLoading && (
+                  <p className="text-[11px] text-slate-400 italic">Carregando...</p>
                 )}
+
+                {!isLoading && !loadError && dayAppointments.length === 0 && (
+                  <p className="text-[11px] text-slate-400 italic">Sem agendamentos</p>
+                )}
+
+                {!isLoading &&
+                  dayAppointments.map((item) => {
+                    const animal = animals[item.animalId];
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-2 rounded-xl border text-[10px] shadow-2xs ${STATUS_STYLE[item.status]}`}
+                      >
+                        <p className="font-bold font-mono">
+                          {formatHora(item.horaInicio)} – {formatHora(item.horaFim)}
+                        </p>
+                        <p className="font-bold truncate">
+                          {animal?.nome ?? `Animal #${item.animalId}`}
+                        </p>
+                        <p className="truncate opacity-80">
+                          {animal?.tutorNome ?? `Tutor #${item.tutorId ?? '—'}`}
+                        </p>
+                        <p className="truncate opacity-70 font-mono">
+                          {vets.find((vet) => vet.id === item.veterinarioId)?.nomeCompleto ??
+                            `Vet #${item.veterinarioId}`}{' '}
+                          • {STATUS_LABEL[item.status]}
+                        </p>
+
+                        <div className="flex items-center gap-1 mt-1.5">
+                          {item.status === 'AGENDADO' && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(item)}
+                              title="Reagendar"
+                              className="px-1.5 py-0.5 rounded bg-white/70 border border-current/20 hover:bg-white text-[9px] font-bold"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
+                          {item.status === 'ATENDIMENTO_REALIZADO' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusAction(item, 'CONCLUIDO')}
+                              disabled={pendingActionId === item.id}
+                              title="Marcar como concluído"
+                              className="px-1.5 py-0.5 rounded bg-white/70 border border-current/20 hover:bg-white text-[9px] font-bold disabled:opacity-50"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                          )}
+                          {(item.status === 'AGENDADO' || item.status === 'AGUARDANDO_ATENDIMENTO') && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelAppointment(item)}
+                              disabled={pendingActionId === item.id}
+                              title="Cancelar agendamento"
+                              className="px-1.5 py-0.5 rounded bg-white/70 border border-current/20 hover:bg-white text-[9px] font-bold disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             );
           })}
         </div>
+
+        <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            Total: <strong className="text-slate-800">{appointments.length}</strong> agendamento(s)
+            nesta semana
+          </span>
+          <span className="flex items-center gap-1.5 text-slate-400">
+            <Clock className="w-3.5 h-3.5" />
+            Fuso horário local
+          </span>
+        </div>
       </div>
 
-      {/* Right Drawer: Novo Agendamento de Consulta */}
       {isDrawerOpen && (
         <>
           <div
@@ -340,10 +575,10 @@ export const ClinicSchedule: React.FC = () => {
                   <CalendarIcon className="w-5 h-5 text-[#0e5a60]" />
                   <div>
                     <h2 className="text-base font-bold text-slate-900 font-serif">
-                      Novo Agendamento de Consulta / Procedimento
+                      {editingId ? 'Reagendar Agendamento' : 'Novo Agendamento'}
                     </h2>
                     <p className="text-[10px] text-slate-400">
-                      Preencha os detalhes clínicos para reservar o horário na grade
+                      O horário precisa estar disponível para o veterinário.
                     </p>
                   </div>
                 </div>
@@ -357,120 +592,197 @@ export const ClinicSchedule: React.FC = () => {
 
               <form onSubmit={handleCreateAppointment} className="space-y-4 mt-6">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700">
-                      Buscar Tutor ou Pet <span className="text-red-500">*</span>
-                    </label>
-                    <button type="button" className="text-[11px] font-bold text-[#0e5a60] hover:underline">
-                      + Cadastrar Novo Pet
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchPet}
-                      onChange={(e) => setSearchPet(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
-                    />
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-2.5" />
-                  </div>
-                </div>
-
-                {/* Selected Pet Banner */}
-                <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-teal-100 text-[#0e5a60] flex items-center justify-center font-bold text-xs shrink-0">
-                    🐾
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-slate-900">
-                      Pipoca • Shih-tzu <span className="text-[10px] font-normal text-slate-500">(Fêmea, 4 anos)</span>
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Tutor(a): Claudia Ramos • (11) 98765-4321
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono text-[#0e5a60] bg-white px-1.5 py-0.5 rounded border border-teal-200">
-                    #08492
-                  </span>
-                </div>
-
-                {/* Profissional & Serviço */}
-                <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Profissional Responsável <span className="text-red-500">*</span>
+                    Buscar tutor <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={responsibleVet}
-                    onChange={(e) => setResponsibleVet(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
-                  >
-                    <option>Dr. Ricardo Mendes - Clínica Geral & Cirurgia</option>
-                    <option>Dra. Camila Duarte - Dermatologia</option>
-                    <option>Dr. Fernando Costa - Medicina Felina</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Tipo de Serviço <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={serviceType}
-                    onChange={(e) => setServiceType(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
-                  >
-                    <option>Consulta de Retorno / Acompanhamento</option>
-                    <option>Consulta Especializada Dermatológica</option>
-                    <option>Vacina V10 Polivalente</option>
-                    <option>Procedimento Cirúrgico</option>
-                  </select>
-                </div>
-
-                {/* Data e Horário */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Data do Atendimento <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Horário <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="time"
-                        value={time}
-                        onChange={(e) => setTime(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
-                      />
-                      <span className="text-[10px] text-slate-400 shrink-0">30 min</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Observações */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Observações / Motivo da Consulta
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                  <input
+                    type="text"
+                    value={tutorTermo}
+                    onChange={(event) => setTutorTermo(event.target.value)}
+                    placeholder="Nome, CPF, telefone ou e-mail"
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Tutor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={tutorId}
+                    onChange={(event) => setTutorId(event.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
+                  >
+                    <option value="">Selecione o tutor...</option>
+                    {tutors.map((tutor) => (
+                      <option key={tutor.id} value={tutor.id}>
+                        {tutor.nomeCompleto} • {tutor.telefone || tutor.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Animal <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={animalId}
+                    onChange={(event) => setAnimalId(event.target.value)}
+                    required
+                    disabled={!tutorId}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                  >
+                    <option value="">
+                      {tutorId
+                        ? animalsForTutor.length > 0
+                          ? 'Selecione o animal...'
+                          : 'Tutor sem animais cadastrados'
+                        : 'Selecione um tutor primeiro'}
+                    </option>
+                    {animalsForTutor.map((animal) => (
+                      <option key={animal.id} value={animal.id}>
+                        {animal.nome} • {animal.especie}
+                        {animal.raca ? ` / ${animal.raca}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedTutor && selectedAnimal && (
+                  <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-teal-100 text-[#0e5a60] flex items-center justify-center shrink-0">
+                      <PawPrint className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">
+                        {selectedAnimal.nome} • {selectedAnimal.especie}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        Tutor(a): {selectedTutor.nomeCompleto}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Veterinário <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={veterinarioId}
+                    onChange={(event) => {
+                      setVeterinarioId(event.target.value);
+                      setHoraInicio('');
+                    }}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-[#0e5a60]"
+                  >
+                    <option value="">Selecione o veterinário...</option>
+                    {vets.map((vet) => (
+                      <option key={vet.id} value={vet.id}>
+                        {vet.nomeCompleto}
+                        {vet.crmv ? ` • ${vet.crmv}` : ''}
+                        {vet.especialidade ? ` • ${vet.especialidade}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {vets.length === 0 && (
+                    <p className="text-[10px] text-amber-700 mt-1">
+                      Nenhum veterinário ativo encontrado. Cadastre um veterinário no painel admin.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Data <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={data}
+                    min={todayIso}
+                    onChange={(event) => {
+                      setData(event.target.value);
+                      setHoraInicio('');
+                    }}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0e5a60]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Horário disponível <span className="text-red-500">*</span>
+                  </label>
+
+                  {isLoadingSlots && (
+                    <p className="text-[11px] text-slate-500">Consultando horários...</p>
+                  )}
+
+                  {slotError && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      {slotError}
+                    </div>
+                  )}
+
+                  {!isLoadingSlots && !slotError && veterinarioId && data && horarios.length === 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      Nenhum horário disponível para este veterinário nesta data.
+                    </p>
+                  )}
+
+                  {morningSlots.length > 0 && (
+                    <div className="space-y-1.5 mt-1">
+                      <p className="text-[10px] uppercase font-bold text-slate-400">Manhã</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {morningSlots.map((slot) => (
+                          <button
+                            key={slot.horaInicio}
+                            type="button"
+                            onClick={() => setHoraInicio(slot.horaInicio)}
+                            className={`py-1.5 rounded-xl text-xs font-mono font-semibold border transition-all ${
+                              horaInicio === slot.horaInicio
+                                ? 'bg-[#0e5a60] text-white border-[#0e5a60]'
+                                : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                            }`}
+                          >
+                            {formatHora(slot.horaInicio)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {afternoonSlots.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      <p className="text-[10px] uppercase font-bold text-slate-400">Tarde</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {afternoonSlots.map((slot) => (
+                          <button
+                            key={slot.horaInicio}
+                            type="button"
+                            onClick={() => setHoraInicio(slot.horaInicio)}
+                            className={`py-1.5 rounded-xl text-xs font-mono font-semibold border transition-all ${
+                              horaInicio === slot.horaInicio
+                                ? 'bg-[#0e5a60] text-white border-[#0e5a60]'
+                                : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                            }`}
+                          >
+                            {formatHora(slot.horaInicio)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {formError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                    {formError}
+                  </div>
+                )}
               </form>
             </div>
 
@@ -484,16 +796,28 @@ export const ClinicSchedule: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleCreateAppointment}
-                className="px-5 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                onClick={() => handleCreateAppointment()}
+                disabled={isSaving}
+                className="px-5 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 disabled:opacity-60"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Confirmar e Notificar Tutor</span>
+                <span>
+                  {isSaving
+                    ? 'Salvando...'
+                    : editingId
+                    ? 'Salvar Reagendamento'
+                    : 'Confirmar Agendamento'}
+                </span>
               </button>
             </div>
           </div>
         </>
       )}
+
+      <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        Horários exibidos vêm da disponibilidade cadastrada do veterinário no serviço de agendamento.
+      </p>
     </div>
   );
 };

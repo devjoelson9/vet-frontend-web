@@ -1,30 +1,123 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   Calendar,
-  MapPin,
-  Clock,
-  Plus,
-  FileText,
-  FileCheck2,
-  Syringe,
   CheckCircle2,
-  ArrowRight,
+  Clock,
+  FileText,
+  PawPrint,
+  Plus,
   ShieldCheck,
 } from 'lucide-react';
 import { AppScreen } from '../../types';
+import type { AnimalApi } from '../../types/api';
+import { animalService } from '../../services/animalService';
+import { getApiErrorMessage } from '../../services/apiError';
+import {
+  agendamentoService,
+  addDays,
+  formatHora,
+  parseIsoDate,
+  toIsoDate,
+  type AgendamentoApi,
+} from '../../services/agendamentoService';
+import { veterinarioService, type VeterinarioResumoApi } from '../../services/veterinarioService';
 
 interface TutorHomeProps {
   onNavigate: (screen: AppScreen) => void;
 }
 
+function formatLongDate(isoDate: string): string {
+  return parseIsoDate(isoDate).toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+  });
+}
+
+function daysUntil(isoDate: string): number {
+  const target = parseIsoDate(isoDate);
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  return Math.max(0, Math.round((target.getTime() - start.getTime()) / 86400000));
+}
+
 export const TutorHome: React.FC<TutorHomeProps> = ({ onNavigate }) => {
+  const [nextAppointment, setNextAppointment] = useState<AgendamentoApi | null>(null);
+  const [pets, setPets] = useState<AnimalApi[]>([]);
+  const [vets, setVets] = useState<VeterinarioResumoApi[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHome() {
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const today = new Date();
+        const [appointments, petPage, vetList] = await Promise.all([
+          agendamentoService.listar({
+            inicio: toIsoDate(today),
+            fim: toIsoDate(addDays(today, 180)),
+          }),
+          animalService.listMine(0, 100),
+          veterinarioService.listar().catch(() => []),
+        ]);
+
+        if (cancelled) return;
+
+        const next = appointments
+          .filter(
+            (item) =>
+              item.status === 'AGENDADO' || item.status === 'AGUARDANDO_ATENDIMENTO'
+          )
+          .slice()
+          .sort((a, b) =>
+            `${a.data}T${a.horaInicio}`.localeCompare(`${b.data}T${b.horaInicio}`)
+          )[0];
+
+        setNextAppointment(next ?? null);
+        setPets(petPage.content);
+        setVets(vetList);
+      } catch (loadError) {
+        if (!cancelled) {
+          setNextAppointment(null);
+          setPets([]);
+          setError(
+            getApiErrorMessage(loadError, 'Não foi possível carregar sua página inicial.')
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadHome();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const nextAnimal = nextAppointment
+    ? pets.find((pet) => pet.id === nextAppointment.animalId) ?? null
+    : null;
+  const nextVet = nextAppointment
+    ? vets.find((vet) => vet.id === nextAppointment.veterinarioId)
+    : null;
+
   return (
     <div className="space-y-8">
-      {/* Hero Green Banner */}
-      <div className="bg-[#0e5a60] rounded-3xl p-8 lg:p-10 text-white relative overflow-hidden shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6">
-        {/* Background paw watermark */}
-        <div className="absolute -right-8 -bottom-10 opacity-10 pointer-events-none">
-          <svg className="w-80 h-80 fill-white" viewBox="0 0 24 24">
+      <section className="relative overflow-hidden rounded-3xl sidebar-mesh p-7 text-white shadow-lift sm:p-9">
+        <div className="grain pointer-events-none absolute inset-0 opacity-[0.05] mix-blend-overlay" />
+        <div className="pointer-events-none absolute -right-28 -top-24 h-80 w-80 rounded-full border border-white/[0.07]" />
+        <div className="pointer-events-none absolute -right-10 -top-6 h-48 w-48 rounded-full border border-white/[0.05]" />
+        <div className="pointer-events-none absolute -bottom-20 right-10 h-64 w-64 rotate-[-10deg] text-white/[0.05]">
+          <svg className="h-full w-full fill-current" viewBox="0 0 24 24">
             <ellipse cx="6.5" cy="8.5" rx="2" ry="3" />
             <ellipse cx="17.5" cy="8.5" rx="2" ry="3" />
             <ellipse cx="10" cy="5" rx="2" ry="3" />
@@ -33,318 +126,287 @@ export const TutorHome: React.FC<TutorHomeProps> = ({ onNavigate }) => {
           </svg>
         </div>
 
-        <div className="max-w-2xl relative z-10">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-800/80 text-teal-200 border border-teal-600/40">
-            <ShieldCheck className="w-3.5 h-3.5" /> Tutor Verificado • Unidade Jardins
-          </span>
-          <h1 className="text-2xl md:text-4xl font-bold font-serif mt-3 tracking-tight">
-            Cuidando de quem sempre alegra seus dias.
-          </h1>
-          <p className="text-teal-100 text-xs md:text-sm mt-2 max-w-xl leading-relaxed">
-            Acompanhe em tempo real os cuidados preventivos, imunizações e receitas de Thor e Mel com a segurança clínica de sempre.
-          </p>
-        </div>
+        <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div className="max-w-2xl">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-jade-300 backdrop-blur-sm">
+              <ShieldCheck className="h-3 w-3" />
+              Portal do tutor
+            </span>
+            <h1 className="mt-4 font-display text-[1.85rem] font-bold leading-[1.14] tracking-tight sm:text-[2.35rem]">
+              Cuidando de quem sempre
+              <br className="hidden sm:block" />{' '}
+              <span className="font-normal italic text-jade-300">alegra seus dias.</span>
+            </h1>
+            <p className="mt-3 max-w-xl text-[12.5px] leading-relaxed text-teal-50/60">
+              Acompanhe as consultas, o prontuário e as prescrições dos seus pets com os dados
+              atualizados pela clínica.
+            </p>
+          </div>
 
-        <div className="relative z-10">
-          <button
-            onClick={() => onNavigate('tutor-booking')}
-            className="px-6 py-3 bg-teal-200 hover:bg-teal-100 text-[#0e5a60] font-bold text-xs md:text-sm rounded-2xl shadow-md transition-all flex items-center gap-2 shrink-0 hover:scale-102"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>+ Agendar Nova Consulta / Vacina</span>
-          </button>
-        </div>
-      </div>
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <div className="flex gap-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-3.5 py-2.5 backdrop-blur-sm">
+                <p className="font-display text-xl font-bold leading-none">{pets.length}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-teal-50/45">
+                  pets
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-3.5 py-2.5 backdrop-blur-sm">
+                <p className="font-display text-xl font-bold leading-none">
+                  {nextAppointment ? daysUntil(nextAppointment.data) : '—'}
+                </p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-teal-50/45">
+                  dias p/ consulta
+                </p>
+              </div>
+            </div>
 
-      {/* Próxima Visita Agendada */}
+            <button
+              onClick={() => onNavigate('tutor-booking')}
+              className="inline-flex items-center gap-2 rounded-xl bg-jade-300 px-5 py-3 text-xs font-bold text-brand-900 shadow-[0_18px_36px_-18px_rgba(111,214,196,0.9)] transition-all hover:bg-jade-300/90 active:scale-[0.985]"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.6} />
+              <span>Agendar nova consulta</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {error && (
+        <div className="bg-white rounded-2xl border border-red-200 shadow-2xs p-5 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-slate-900">Falha ao carregar seus dados</p>
+            <p className="text-xs text-slate-500 mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-[#0e5a60]" />
-            <h2 className="text-base font-bold text-slate-900 font-serif">
-              Próxima Visita Agendada
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">Sua agenda</p>
+            <h2 className="mt-1.5 font-display text-lg font-bold tracking-tight text-brand-900">
+              Próxima visita agendada
             </h2>
           </div>
-          <span className="px-2.5 py-0.5 rounded-full bg-teal-50 text-[#0e5a60] text-xs font-bold border border-teal-200">
-            • Em 2 dias
-          </span>
+          {nextAppointment && (
+            <button
+              onClick={() => onNavigate('tutor-appointments')}
+              className="text-[11px] font-bold text-brand-600 transition-colors hover:text-brand-800"
+            >
+              Ver todas as consultas
+            </button>
+          )}
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <img
-              src="/src/assets/images/pet_golden_thor_1791553348232.jpg"
-              alt="Thor"
-              className="w-16 h-16 rounded-2xl object-cover border-2 border-teal-200 shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-slate-900">Thor</h3>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                  Golden Retriever
-                </span>
-              </div>
-              <p className="text-xs font-medium text-slate-600 mt-0.5">
-                Consulta de Rotina & Avaliação Geral
-              </p>
-              <p className="text-[11px] text-teal-700 font-bold mt-0.5 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Confirmada com Dr. Ricardo Mendes
-              </p>
-            </div>
+        {isLoading && (
+          <div className="card flex items-center gap-3 p-6">
+            <div className="h-5 w-5 animate-spin rounded-full border-[3px] border-brand-600 border-t-transparent" />
+            <p className="text-xs font-semibold text-slate-500">Carregando sua agenda...</p>
           </div>
+        )}
 
-          {/* Time & Location */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs border-y lg:border-y-0 lg:border-x border-slate-100 py-4 lg:py-0 lg:px-8">
-            <div className="flex items-start gap-3">
-              <Calendar className="w-4 h-4 text-[#0e5a60] shrink-0 mt-0.5" />
+        {!isLoading && !nextAppointment && (
+          <div className="card flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+                <Calendar className="h-5 w-5" />
+              </div>
               <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Data e Horário</p>
-                <p className="font-bold text-slate-900 mt-0.5">Terça-feira, 27 de Maio às 10:00</p>
-                <p className="text-[11px] text-slate-500">Dr. Ricardo Mendes • Clínica Geral</p>
+                <p className="text-sm font-bold text-slate-900">Nenhuma visita agendada</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Agende uma consulta para manter a saúde do seu pet em dia.
+                </p>
               </div>
             </div>
-
-            <div className="flex items-start gap-3">
-              <MapPin className="w-4 h-4 text-[#0e5a60] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Localização</p>
-                <p className="font-bold text-slate-900 mt-0.5">Unidade Jardins — Sala 02</p>
-                <p className="text-[11px] text-slate-500">Alameda dos Pinheiros, 1024 – São Paulo</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
-            <button
-              onClick={() => alert('Presença confirmada com sucesso!')}
-              className="px-4 py-2 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Confirmar Presença</span>
-            </button>
             <button
               onClick={() => onNavigate('tutor-booking')}
-              className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition-colors text-center"
+              className="btn-primary shrink-0"
             >
-              Reagendar Horário
+              <Plus className="w-4 h-4" />
+              <span>Agendar agora</span>
             </button>
           </div>
-        </div>
+        )}
+
+        {!isLoading && nextAppointment && (
+          <div className="card relative flex flex-col justify-between gap-6 overflow-hidden p-6 lg:flex-row lg:items-center">
+            <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-jade-400 to-brand-600" />
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-sand-100 text-brand-700 shadow-sm">
+                <PawPrint className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    {nextAnimal?.nome ?? `Animal #${nextAppointment.animalId}`}
+                  </h3>
+                  <span className="rounded-full border border-brand-100 bg-brand-50 px-2.5 py-0.5 text-[10px] font-bold text-brand-700">
+                    {nextAnimal
+                      ? `${nextAnimal.especie}${nextAnimal.raca ? ` • ${nextAnimal.raca}` : ''}`
+                      : 'Paciente'}
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-slate-600 mt-0.5">
+                  Consulta com {nextVet?.nomeCompleto ?? `veterinário #${nextAppointment.veterinarioId}`}
+                </p>
+                <p className="text-[11px] text-brand-700 font-bold mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {nextAppointment.status === 'AGENDADO'
+                    ? 'Agendamento confirmado'
+                    : 'Paciente aguardando atendimento'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs border-y lg:border-y-0 lg:border-x border-slate-100 py-4 lg:py-0 lg:px-8">
+              <div className="flex items-start gap-3">
+                <Calendar className="w-4 h-4 text-[#0e5a60] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-400">
+                    Data e Horário
+                  </p>
+                  <p className="font-bold text-slate-900 mt-0.5 capitalize">
+                    {formatLongDate(nextAppointment.data)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    {formatHora(nextAppointment.horaInicio)} –{' '}
+                    {formatHora(nextAppointment.horaFim)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Clock className="w-4 h-4 text-[#0e5a60] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Agendamento</p>
+                  <p className="font-bold text-slate-900 mt-0.5">
+                    #{String(nextAppointment.id).padStart(4, '0')}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Em {daysUntil(nextAppointment.data)} dia(s)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
+              <button
+                onClick={() => onNavigate('tutor-appointments')}
+                className="btn-ghost text-center"
+              >
+                Gerenciar consulta
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Meus Pets Cadastrados */}
       <div className="space-y-3">
-        <div>
-          <h2 className="text-base font-bold text-slate-900 font-serif">
-            Meus Pets Cadastrados
-          </h2>
-          <p className="text-xs text-slate-400">
-            2 companheiros sob os cuidados da PawCare
-          </p>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">Família</p>
+            <h2 className="mt-1.5 font-display text-lg font-bold tracking-tight text-brand-900">
+              Meus pets cadastrados
+            </h2>
+            <p className="mt-0.5 text-[11px] text-slate-400">
+              {pets.length} {pets.length === 1 ? 'pet cadastrado' : 'pets cadastrados'}
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('tutor-pets')}
+            className="text-[11px] font-bold text-brand-600 transition-colors hover:text-brand-800"
+          >
+            Gerenciar pets
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Pet 1: Thor */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 flex flex-col justify-between space-y-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <img
-                  src="/src/assets/images/pet_golden_thor_1791553348232.jpg"
-                  alt="Thor"
-                  className="w-12 h-12 rounded-xl object-cover border border-slate-200"
-                  referrerPolicy="no-referrer"
-                />
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Thor</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Golden Retriever • 3 anos • Macho • 32.4 kg
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Status de Imunização:</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                    • Todas vacinas em dia
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Última Consulta:</span>
-                  <span className="font-bold text-slate-800">Hoje (24/05/2025)</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span>Microchip:</span>
-                  <span className="font-mono">981098104819283</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => onNavigate('tutor-records')}
-              className="w-full py-2.5 bg-teal-50 hover:bg-teal-100 text-[#0e5a60] text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {pets.map((pet) => (
+            <div
+              key={pet.id}
+              className="card-interactive flex flex-col justify-between space-y-4 p-5"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Ver Carteira de Vacinas e Prontuário</span>
-            </button>
-          </div>
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white bg-gradient-to-br from-brand-50 to-sand-100 text-brand-700 shadow-sm">
+                    <PawPrint className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">{pet.nome}</h3>
+                    <p className="text-[11px] text-slate-500">
+                      {pet.especie}
+                      {pet.raca ? ` • ${pet.raca}` : ''}
+                      {pet.peso != null ? ` • ${pet.peso} kg` : ''}
+                    </p>
+                  </div>
+                </div>
 
-          {/* Pet 2: Mel */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-5 flex flex-col justify-between space-y-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <img
-                  src="/src/assets/images/pet_spitz_mel_1791553357249.jpg"
-                  alt="Mel"
-                  className="w-12 h-12 rounded-xl object-cover border border-slate-200"
-                  referrerPolicy="no-referrer"
-                />
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Mel</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Spitz Alemão • 1 ano • Fêmea • 3.8 kg
-                  </p>
+                <div className="mt-4 space-y-2 text-xs">
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-500">Sexo</span>
+                    <span className="font-bold text-slate-800">
+                      {pet.sexo === 'MACHO' ? 'Macho' : pet.sexo === 'FEMEA' ? 'Fêmea' : 'Não informado'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-500">Nascimento</span>
+                    <span className="font-bold text-slate-800 font-mono">
+                      {pet.dataNascimento
+                        ? pet.dataNascimento.split('-').reverse().join('/')
+                        : 'Não informado'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Status de Imunização:</span>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-bold">
-                    • 1 Vacina a vencer em 15 dias
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Pendente:</span>
-                  <span className="font-bold text-amber-700">Giárgia (Dose Anual)</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span>Última Consulta:</span>
-                  <span>12/03/2025 (Check-up)</span>
-                </div>
-              </div>
+              <button
+                onClick={() => onNavigate('tutor-records')}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand-50 py-2.5 text-xs font-bold text-brand-700 transition-colors hover:bg-brand-100"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Ver prontuário</span>
+              </button>
             </div>
+          ))}
 
-            <button
-              onClick={() => onNavigate('tutor-booking')}
-              className="w-full py-2.5 bg-[#0e5a60] hover:bg-[#0a454a] text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-xs"
-            >
-              <Syringe className="w-3.5 h-3.5" />
-              <span>Agendar Vacinação</span>
-            </button>
-          </div>
-
-          {/* Add New Pet Card */}
           <div
             onClick={() => onNavigate('tutor-pets')}
-            className="rounded-3xl border-2 border-dashed border-slate-300 hover:border-teal-400 hover:bg-teal-50/20 cursor-pointer p-6 flex flex-col items-center justify-center text-center transition-colors space-y-3"
+            className="group flex min-h-[190px] cursor-pointer flex-col items-center justify-center space-y-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white/40 p-6 text-center transition-all hover:border-brand-300 hover:bg-brand-50/40"
           >
-            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-[#0e5a60] flex items-center justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 transition-transform group-hover:scale-105">
               <Plus className="w-6 h-6" />
             </div>
             <div>
-              <p className="font-bold text-slate-800 text-sm">+ Cadastrar Novo Pet</p>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Adicione um novo membro da família para centralizar prontuários, vacinas e consultas preventivas.
+              <p className="text-sm font-bold text-slate-800">Cadastrar novo pet</p>
+              <p className="mx-auto mt-1 max-w-xs text-xs text-slate-400">
+                Adicione um novo membro da família para centralizar prontuários e consultas.
               </p>
             </div>
-            <span className="text-xs font-bold text-[#0e5a60]">Iniciar Cadastro →</span>
+            <span className="text-xs font-bold text-brand-600">Iniciar cadastro →</span>
           </div>
         </div>
       </div>
 
-      {/* Histórico Recente e Documentos Médicos */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-6 space-y-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-900 font-serif">
-            Histórico Recente e Documentos Médicos
-          </h2>
-          <p className="text-xs text-slate-400">
-            Baixe receitas digitais válidas, atestados e laudos laboratoriais
-          </p>
-        </div>
-
-        <div className="divide-y divide-slate-100 text-xs">
-          {/* Doc 1 */}
-          <div className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-teal-50 text-[#0e5a60] flex items-center justify-center">
-                <FileCheck2 className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900 flex items-center gap-2">
-                  Receita Médica Digital — Consulta Dermatológica
-                  <span className="px-2 py-0.2 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
-                    Thor
-                  </span>
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Emitida em 24/05/2025 • Dra. Camila Vasconcelos (CRMV-SP 49210) • Validade 30 dias
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate('tutor-records')}
-              className="text-[#0e5a60] font-bold hover:underline"
-            >
-              Visualizar →
-            </button>
-          </div>
-
-          {/* Doc 2 */}
-          <div className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900 flex items-center gap-2">
-                  Exame Laboratorial — Hemograma Completo
-                  <span className="px-2 py-0.2 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
-                    Thor
-                  </span>
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Realizado em 15/01/2025 • Laboratório Central PawCare • Laudo liberado sem alterações
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate('tutor-records')}
-              className="text-[#0e5a60] font-bold hover:underline"
-            >
-              Visualizar →
-            </button>
-          </div>
-
-          {/* Doc 3 */}
-          <div className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <Syringe className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900 flex items-center gap-2">
-                  Certificado de Vacina Quádrupla Felina / Canina (V10)
-                  <span className="px-2 py-0.2 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
-                    Mel
-                  </span>
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Aplicada em 10/11/2024 • Lote BV-99201 • Próximo reforço em 10/11/2025
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate('tutor-records')}
-              className="text-[#0e5a60] font-bold hover:underline"
-            >
-              Visualizar →
-            </button>
+      <div className="card flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-glow">
+            <FileText className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="font-display text-base font-bold text-brand-900">
+              Prontuário e prescrições
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Consulte o histórico de atendimentos e baixe as prescrições emitidas pelos
+              veterinários.
+            </p>
           </div>
         </div>
+        <button onClick={() => onNavigate('tutor-records')} className="btn-primary shrink-0">
+          Abrir prontuário
+        </button>
       </div>
     </div>
   );

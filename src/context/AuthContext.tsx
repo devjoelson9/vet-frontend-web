@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { authService, LoginRequest } from '../services/authService';
-import { USER_SESSION_KEY, getStoredAuthToken, setStoredAuthToken } from '../services/apiClient';
-import { MOCK_USERS } from '../data/mockData';
+import {
+  USER_SESSION_KEY,
+  getStoredAuthToken,
+  setStoredAuthToken,
+  setStoredRefreshToken,
+} from '../services/apiClient';
 
 interface AuthContextType {
   user: User | null;
@@ -12,7 +16,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (credentials: LoginRequest) => Promise<User>;
   logout: () => void;
-  setUserRole: (role: UserRole) => void;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearSession = () => {
     setStoredAuthToken(null);
+    setStoredRefreshToken(null);
     localStorage.removeItem(USER_SESSION_KEY);
     setUser(null);
     setToken(null);
@@ -72,23 +77,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearSession();
   };
 
-  const setUserRole = (newRole: UserRole) => {
-    const newUser = MOCK_USERS.find((u) => u.role === newRole) || {
-      id: `u-${newRole}`,
-      name:
-        newRole === 'admin'
-          ? 'Dr. Carlos Mendes'
-          : newRole === 'receptionist'
-          ? 'Dra. Sarah Jenkins'
-          : newRole === 'vet'
-          ? 'Dr. Ricardo Mendes'
-          : 'Mariana Siqueira',
-      email: `${newRole}@maisvet.com.br`,
-      role: newRole,
-    };
+  const updateUser = (updates: Partial<User>) => {
+    setUser((current) => {
+      if (!current) return current;
 
-    setUser(newUser);
-    localStorage.setItem(USER_SESSION_KEY, JSON.stringify(newUser));
+      const nextUser = { ...current, ...updates };
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(nextUser));
+      return nextUser;
+    });
   };
 
   return (
@@ -101,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
-        setUserRole,
+        updateUser,
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import {
   CreditCard,
   Phone,
   Mail,
+  MapPin,
   Lock,
   Eye,
   EyeOff,
@@ -11,9 +12,14 @@ import {
   Check,
   Circle,
   ShieldCheck,
+  ShieldAlert,
+  MailCheck,
 } from 'lucide-react';
 import { MaisVetLogo } from '../common/MaisVetLogo';
+import { AuthBrandPanel } from './AuthBrandPanel';
 import { AppScreen } from '../../types';
+import { authService } from '../../services/authService';
+import { getApiErrorMessage } from '../../services/apiError';
 
 interface RegisterViewProps {
   onNavigate: (screen: AppScreen) => void;
@@ -31,8 +37,12 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [registered, setRegistered] = useState(false);
 
   const criteria = [
     { key: 'length', label: 'Mínimo de 8 caracteres', met: password.length >= 8 },
@@ -52,9 +62,35 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   const score = password ? criteria.filter((item) => item.met).length : 0;
   const level = score > 0 ? PASSWORD_LEVELS[score - 1] : null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onNavigate('tutor-home');
+    setErrorMessage('');
+
+    if (cpf.replace(/\D/g, '').length !== 11) {
+      setErrorMessage('Informe um CPF com 11 dígitos.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await authService.register({
+        nomeCompleto: name,
+        cpf,
+        email,
+        senha: password,
+        telefone: phone,
+        endereco: address,
+      });
+      setRegistered(true);
+    } catch (err) {
+      console.error('[MaisVet] Falha no cadastro:', err);
+      setErrorMessage(
+        getApiErrorMessage(err, 'Não foi possível concluir o cadastro. Tente novamente.')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass =
@@ -63,48 +99,18 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
   return (
     <div className="h-dvh w-full overflow-hidden bg-white flex font-sans">
       {/* Left: Brand / Hero */}
-      <div className="relative hidden lg:flex lg:w-[38%] xl:w-[40%] flex-col justify-between overflow-hidden">
-        <img
-          src="/src/assets/images/vet_hug_dog_login_1791553337661.jpg"
-          alt="Veterinária abraçando cão Golden Retriever na clínica"
-          className="absolute inset-0 h-full w-full object-cover"
-          referrerPolicy="no-referrer"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-br from-[#06373b]/95  to-[#0e5a60]/25" />
-        
-        <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-14">
-          <MaisVetLogo size="lg" whiteText />
-
-          <div className="max-w-md">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-100 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal-300" />
-              Cadastro do tutor
-            </span>
-            <h1 className="mt-5 font-serif text-3xl xl:text-[2.7rem] font-bold leading-[1.12] tracking-tight text-white">
-              A saúde do seu pet
-              <br />
-              <span className="font-normal italic text-teal-100">começa aqui.</span>
-            </h1>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-teal-50/80">
-              Crie sua conta para acompanhar consultas, vacinas, receitas e o histórico
-              completo do seu companheiro em um só lugar.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {['Agendamento online', 'Prontuário digital', 'Atendimento humanizado'].map((item) => (
-              <span
-                key={item}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-medium text-white/90 backdrop-blur-sm"
-              >
-                <Check className="h-3 w-3 text-teal-300" />
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <AuthBrandPanel
+        badge="Cadastro do tutor"
+        title={
+          <>
+            A saúde do seu pet
+            <br />
+            <span className="font-normal italic text-jade-300">começa aqui.</span>
+          </>
+        }
+        description="Crie sua conta para acompanhar consultas, vacinas, receitas e o histórico completo do seu companheiro em um só lugar."
+        features={['Agendamento online', 'Prontuário digital', 'Atendimento humanizado']}
+      />
 
       {/* Right: Registration */}
       <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar bg-[#f7fafb]">
@@ -128,7 +134,41 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_24px_60px_-24px_rgba(14,90,96,0.35)] sm:p-7">
+              {registered ? (
+                <div className="py-2 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <MailCheck className="h-6 w-6" />
+                  </div>
+                  <h3 className="mt-4 font-serif text-lg font-bold text-[#0e5a60]">
+                    Conta criada com sucesso
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    Cadastro realizado para{' '}
+                    <span className="font-semibold text-slate-700">{email}</span>. Agora é só
+                    entrar com sua senha.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('auth-login')}
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a]"
+                  >
+                    <span>Ir para o login</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-3.5">
+                {errorMessage && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
+                  >
+                    <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
                 <div>
                   <label
                     htmlFor="register-name"
@@ -221,6 +261,29 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
 
                 <div>
                   <label
+                    htmlFor="register-address"
+                    className="mb-1.5 block text-xs font-semibold text-slate-700"
+                  >
+                    Endereço
+                  </label>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                    <textarea
+                      id="register-address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Rua, número, bairro, cidade - UF, CEP"
+                      autoComplete="street-address"
+                      required
+                      maxLength={500}
+                      rows={2}
+                      className="w-full min-h-20 pl-10 pr-4 py-3 bg-slate-50/70 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:border-[#0e5a60] focus:ring-4 focus:ring-[#0e5a60]/10 transition-all resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
                     htmlFor="register-password"
                     className="mb-1.5 block text-xs font-semibold text-slate-700"
                   >
@@ -297,9 +360,10 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
 
                 <button
                   type="submit"
-                  className="group mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a] hover:shadow-[#0e5a60]/30"
+                  disabled={isSubmitting}
+                  className="group mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e5a60] text-sm font-semibold text-white shadow-lg shadow-[#0e5a60]/20 transition-all hover:bg-[#0a454a] hover:shadow-[#0e5a60]/30 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <span>Criar conta</span>
+                  <span>{isSubmitting ? 'Criando conta...' : 'Criar conta'}</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </button>
 
@@ -314,6 +378,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onNavigate }) => {
                   </button>
                 </p>
               </form>
+              )}
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-slate-400">
